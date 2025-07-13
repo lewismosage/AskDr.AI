@@ -1,41 +1,32 @@
 import React, { useState } from 'react';
 import { Search, Pill, AlertTriangle, Info, Clock } from 'lucide-react';
+import api from '../lip/api';
 
 const MedicationQA = () => {
   const [question, setQuestion] = useState('');
-  const [response, setResponse] = useState('');
+  const [response, setResponse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
 
     setIsLoading(true);
-    
-    // Simulate AI response
-    setTimeout(() => {
-      setResponse(generateMedicationResponse(question));
+    setResponse("");
+    try {
+      const res = await api.post('medications/ask/', { question });
+      setResponse(res.data);
+    } catch (err: any) {
+      setResponse(
+        err.response?.data?.error ||
+        "Sorry, we couldn't get a response. Please try again later."
+      );
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
-  const generateMedicationResponse = (userQuestion: string): string => {
-    const lowerQuestion = userQuestion.toLowerCase();
-    
-    if (lowerQuestion.includes('ibuprofen') || lowerQuestion.includes('advil')) {
-      return "Ibuprofen is a nonsteroidal anti-inflammatory drug (NSAID) commonly used to reduce pain, inflammation, and fever. The typical adult dosage is 200-400mg every 4-6 hours, not exceeding 1200mg in 24 hours unless directed by a doctor. Take with food to reduce stomach irritation. Avoid if you have kidney problems, stomach ulcers, or are taking blood thinners. Common side effects include stomach upset, dizziness, and headache. Always consult your healthcare provider for personalized advice.";
-    }
-    
-    if (lowerQuestion.includes('acetaminophen') || lowerQuestion.includes('tylenol')) {
-      return "Acetaminophen is a pain reliever and fever reducer. The typical adult dose is 325-650mg every 4-6 hours, not exceeding 3000mg in 24 hours. It's generally safer for the stomach than NSAIDs but can cause liver damage if taken in excessive amounts or with alcohol. Do not exceed the recommended dose and be aware that many other medications contain acetaminophen. Consult your healthcare provider if you have liver problems or take other medications.";
-    }
-    
-    if (lowerQuestion.includes('interaction') || lowerQuestion.includes('together')) {
-      return "Drug interactions can be serious and potentially dangerous. Never combine medications without consulting a healthcare professional or pharmacist first. They can check for interactions between your medications, including over-the-counter drugs and supplements. Some interactions can reduce effectiveness, while others can cause harmful side effects. Always provide a complete list of all medications and supplements you're taking to your healthcare provider.";
-    }
-    
-    return "Thank you for your medication question. For specific medication advice, dosages, interactions, and side effects, I strongly recommend consulting with a licensed pharmacist or your healthcare provider. They can provide personalized guidance based on your medical history, current medications, and specific health conditions. Medication safety is very important, and professional medical advice is essential for your well-being.";
-  };
 
   const safetyTips = [
     {
@@ -131,7 +122,18 @@ const MedicationQA = () => {
               Medication Information
             </h2>
             <div className="prose prose-gray max-w-none">
-              <p className="text-gray-700 leading-relaxed">{response}</p>
+              <p className="text-gray-700 leading-relaxed"><strong>Summary:</strong> {response.summary}</p>
+              {response.precautions && response.precautions.length > 0 && (
+                <>
+                  <p className="text-gray-700 leading-relaxed mt-2"><strong>Precautions:</strong></p>
+                  <ul className="list-disc ml-6">
+                    {response.precautions.map((item: string, idx: number) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <p className="text-gray-700 leading-relaxed mt-2"><strong>Advice:</strong> {response.advice}</p>
             </div>
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-sm text-yellow-800">

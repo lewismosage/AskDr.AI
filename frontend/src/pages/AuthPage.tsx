@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Mail, Lock, User, Chrome } from 'lucide-react';
+import api from '../lip/api';
 
 const AuthPage = () => {
   const [isSignIn, setIsSignIn] = useState(true);
@@ -21,7 +22,7 @@ const AuthPage = () => {
     return '';
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: {[key: string]: string} = {};
 
@@ -53,8 +54,43 @@ const AuthPage = () => {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
-      // Handle successful form submission
-      console.log('Form submitted:', formData);
+      try {
+        if (isSignIn) {
+          // Sign In
+          const res = await api.post('token/', {
+            username: formData.email,
+            password: formData.password,
+          });
+          // Store tokens
+          localStorage.setItem('accessToken', res.data.access);
+          localStorage.setItem('refreshToken', res.data.refresh);
+          // Redirect or update UI as needed
+          window.location.href = '/dashboard';
+        } else {
+          // Sign Up
+          const res = await api.post('users/register/', {
+            username: formData.email,
+            email: formData.email,
+            password: formData.password,
+            name: formData.name,
+          });
+          // Optionally auto-login after registration
+          // Redirect to sign in or dashboard
+          setIsSignIn(true);
+        }
+      } catch (err: any) {
+        if (err.response && err.response.data) {
+          // Map backend errors to form
+          const apiErrors = err.response.data;
+          const mappedErrors: {[key: string]: string} = {};
+          for (const key in apiErrors) {
+            mappedErrors[key] = Array.isArray(apiErrors[key]) ? apiErrors[key][0] : apiErrors[key];
+          }
+          setErrors(mappedErrors);
+        } else {
+          setErrors({ general: 'An unexpected error occurred.' });
+        }
+      }
     }
   };
 
