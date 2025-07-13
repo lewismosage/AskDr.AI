@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User } from 'lucide-react';
+import axios from '../lip/api';
 
 interface Message {
   id: number;
@@ -29,51 +30,65 @@ const ChatAssistant = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim()) return;
 
-    const userMessage: Message = {
-      id: messages.length + 1,
-      text: inputMessage,
-      sender: 'user',
+const handleSendMessage = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!inputMessage.trim()) return;
+
+  const userMessage: Message = {
+    id: messages.length + 1,
+    text: inputMessage,
+    sender: 'user',
+    timestamp: new Date()
+  };
+
+  setMessages(prev => [...prev, userMessage]);
+  setInputMessage('');
+  setIsTyping(true);
+
+  try {
+    // Ensure correct base URL and credentials if needed
+    const res = await axios.post('/chat/ask/', { question: inputMessage });
+    // Defensive: handle both data and response shape
+    const data = res.data || {};
+    let aiText = '';
+    if (typeof data.summary === 'string' && data.summary.trim()) {
+      aiText += data.summary.trim();
+    }
+    if (Array.isArray(data.recommendations) && data.recommendations.length > 0) {
+      aiText += (aiText ? '\n\n' : '') + 'Recommendations:';
+      data.recommendations.forEach((rec: string) => {
+        aiText += `\n- ${rec}`;
+      });
+    }
+    if (!aiText) {
+      aiText = 'Sorry, I could not understand the response.';
+    }
+    const aiResponse: Message = {
+      id: messages.length + 2,
+      text: aiText,
+      sender: 'ai',
       timestamp: new Date()
     };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsTyping(true);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: messages.length + 2,
-        text: getAIResponse(inputMessage),
-        sender: 'ai',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, aiResponse]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
-  const getAIResponse = (userInput: string): string => {
-    const lowerInput = userInput.toLowerCase();
-    
-    if (lowerInput.includes('headache') || lowerInput.includes('head pain')) {
-      return "I understand you're experiencing headache pain. Headaches can have various causes including stress, dehydration, lack of sleep, or tension. For immediate relief, you might try drinking water, resting in a quiet dark room, or applying a cold compress. Over-the-counter pain relievers like acetaminophen or ibuprofen may help. However, if headaches are severe, frequent, or accompanied by other symptoms, please consult a healthcare provider.";
+    setMessages(prev => [...prev, aiResponse]);
+  } catch (error: any) {
+    // Try to extract backend error message if available
+    let errorMsg = 'Sorry, there was an error getting a response from the assistant.';
+    if (error?.response?.data?.error) {
+      errorMsg += `\n${error.response.data.error}`;
     }
-    
-    if (lowerInput.includes('fever') || lowerInput.includes('temperature')) {
-      return "Fever is your body's natural response to infection or illness. For adults, a fever is generally considered 100.4°F (38°C) or higher. Stay hydrated, rest, and you can use fever-reducing medications like acetaminophen or ibuprofen. Seek medical attention if fever exceeds 103°F (39.4°C), persists for more than 3 days, or is accompanied by severe symptoms.";
-    }
-    
-    if (lowerInput.includes('medication') || lowerInput.includes('drug') || lowerInput.includes('medicine')) {
-      return "I can provide general information about medications, but always consult your pharmacist or healthcare provider for specific medication questions. Never stop prescribed medications without medical advice. If you're asking about drug interactions, side effects, or dosages, please speak with a healthcare professional who has access to your complete medical history.";
-    }
-    
-    return "Thank you for your question. While I can provide general health information, I recommend consulting with a healthcare professional for personalized medical advice. Is there anything specific about your symptoms or health concerns you'd like me to help explain in general terms?";
-  };
+    const aiResponse: Message = {
+      id: messages.length + 2,
+      text: errorMsg,
+      sender: 'ai',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, aiResponse]);
+  } finally {
+    setIsTyping(false);
+  }
+};
+
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -117,7 +132,7 @@ const ChatAssistant = () => {
                     ? 'bg-primary text-white'
                     : 'bg-white shadow-sm border border-gray-200'
                 }`}>
-                  <p className={`text-sm ${message.sender === 'user' ? 'text-white' : 'text-gray-800'}`}>
+                  <p className={`text-sm whitespace-pre-line ${message.sender === 'user' ? 'text-white' : 'text-gray-800'}`}>
                     {message.text}
                   </p>
                   <p className={`text-xs mt-1 ${

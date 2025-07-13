@@ -20,7 +20,9 @@ def ask_ai(request):
 
         # Instruct Claude to respond with a structured format
         prompt = f"""
-You are a helpful medical assistant. The user asked: "{question}".
+You are a helpful medical assistant. The person you are helping asked: "{question}".
+
+Please respond as if you are speaking directly to them, using 'you' and 'your' instead of 'the user'.
 
 Please respond in **this JSON format**:
 
