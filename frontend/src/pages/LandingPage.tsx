@@ -1,7 +1,7 @@
 import React from 'react';
 import YourHealth from '../assets/StartYourHealth.jpg'
 import { Link } from 'react-router-dom';
-import { ArrowRight, Stethoscope, Pill, Bell, CheckCircle } from 'lucide-react';
+import { ArrowRight, Stethoscope, Pill, Bell, CheckCircle, Heart  } from 'lucide-react';
 
 const LandingPage = () => {
   const features = [

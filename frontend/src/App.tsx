@@ -9,7 +9,6 @@ import MedicationQA from './pages/MedicationQA';
 import Reminders from './pages/Reminders';
 import SubscriptionPlans from './pages/SubscriptionPlans';
 import AuthPage from './pages/AuthPage';
-import Settings from './pages/Settings';
 import ThankYou from './pages/ThankYou';
 import NotFound from './pages/NotFound';
 import TherapistConnect from './pages/therapistconnect/TherapistConnect';
@@ -29,7 +28,6 @@ function App() {
             <Route path="/reminders" element={<Reminders />} />
             <Route path="/plans" element={<SubscriptionPlans />} />
             <Route path="/auth" element={<AuthPage />} />
-            <Route path="/settings" element={<Settings />} />
             <Route path="/thank-you" element={<ThankYou />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
