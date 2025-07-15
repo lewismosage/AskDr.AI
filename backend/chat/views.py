@@ -4,22 +4,39 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.conf import settings
 from .models import ChatLog
+from .models import ChatLog, ChatSession
+import json
+import uuid
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def ask_ai(request):
     question = request.data.get("question", "")
+    session_id = request.data.get("session_id")
+
     if not question:
         return Response({"error": "No question provided."}, status=400)
 
     try:
-        headers = {
-            "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        # Get or create session
+        if session_id:
+            try:
+                session = ChatSession.objects.get(id=session_id)
+            except ChatSession.DoesNotExist:
+                session = ChatSession.objects.create(user=request.user if request.user.is_authenticated else None)
+        else:
+            session = ChatSession.objects.create(user=request.user if request.user.is_authenticated else None)
 
-        # Instruct Claude to respond with a structured format
-        prompt = f"""
+        # Fetch history for context
+        history = ChatLog.objects.filter(session=session).order_by("created_at")[:10]
+        messages = []
+
+        for entry in history:
+            messages.append({"role": "user", "content": entry.question})
+            messages.append({"role": "assistant", "content": entry.response})
+
+        # Append new question
+        messages.append({"role": "user", "content": f"""
 You are a helpful medical assistant. The person you are helping asked: "{question}".
 
 Please respond as if you are speaking directly to them, using 'you' and 'your' instead of 'the user'.
@@ -36,13 +53,16 @@ Please respond in **this JSON format**:
 }}
 
 Only return valid JSON. Do not include explanations or markdown.
-"""
+"""})
+
+        headers = {
+            "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
         payload = {
             "model": "anthropic/claude-3-haiku",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
+            "messages": messages
         }
 
         response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
@@ -51,16 +71,21 @@ Only return valid JSON. Do not include explanations or markdown.
         if response.status_code != 200:
             return Response({"error": data}, status=response.status_code)
 
-        # Parse response content as JSON
-        import json
         content = data["choices"][0]["message"]["content"]
         structured = json.loads(content)
 
-        # Log only if the user is authenticated
-        if request.user.is_authenticated:
-            ChatLog.objects.create(user=request.user, question=question, response=content)
+        # Log the interaction
+        ChatLog.objects.create(
+            session=session,
+            user=request.user if request.user.is_authenticated else None,
+            question=question,
+            response=content
+        )
 
-        return Response(structured)
+        return Response({
+            "session_id": str(session.id),
+            **structured
+        })
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)

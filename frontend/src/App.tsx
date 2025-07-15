@@ -6,12 +6,13 @@ import LandingPage from './pages/LandingPage';
 import SymptomChecker from './pages/SymptomChecker';
 import ChatAssistant from './pages/ChatAssistant';
 import MedicationQA from './pages/MedicationQA';
+import Reminders from './pages/Reminders';
 import SubscriptionPlans from './pages/SubscriptionPlans';
 import AuthPage from './pages/AuthPage';
-import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import ThankYou from './pages/ThankYou';
 import NotFound from './pages/NotFound';
+import TherapistConnect from './pages/therapistconnect/TherapistConnect';
 
 function App() {
   return (
@@ -24,9 +25,10 @@ function App() {
             <Route path="/symptom-checker" element={<SymptomChecker />} />
             <Route path="/chat" element={<ChatAssistant />} />
             <Route path="/medication-qa" element={<MedicationQA />} />
+            <Route path="/therapist-connect" element={<TherapistConnect />} />
+            <Route path="/reminders" element={<Reminders />} />
             <Route path="/plans" element={<SubscriptionPlans />} />
             <Route path="/auth" element={<AuthPage />} />
-            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/thank-you" element={<ThankYou />} />
             <Route path="*" element={<NotFound />} />

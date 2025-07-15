@@ -20,6 +20,7 @@ const ChatAssistant = () => {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -29,6 +30,7 @@ const ChatAssistant = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
 
 
 const handleSendMessage = async (e: React.FormEvent) => {
@@ -47,10 +49,16 @@ const handleSendMessage = async (e: React.FormEvent) => {
   setIsTyping(true);
 
   try {
-    // Ensure correct base URL and credentials if needed
-    const res = await axios.post('/chat/ask/', { question: inputMessage });
-    // Defensive: handle both data and response shape
+    const res = await axios.post('/chat/ask/', {
+      question: inputMessage,
+      ...(sessionId ? { session_id: sessionId } : {})
+    });
+
     const data = res.data || {};
+    if (!sessionId && data.session_id) {
+      setSessionId(data.session_id); // Store the session
+    }
+
     let aiText = '';
     if (typeof data.summary === 'string' && data.summary.trim()) {
       aiText += data.summary.trim();
@@ -64,6 +72,7 @@ const handleSendMessage = async (e: React.FormEvent) => {
     if (!aiText) {
       aiText = 'Sorry, I could not understand the response.';
     }
+
     const aiResponse: Message = {
       id: messages.length + 2,
       text: aiText,

@@ -1,54 +1,66 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Search, AlertTriangle, Clock, Thermometer } from 'lucide-react';
+import { fetchNearbyClinics } from '../lip/apiHelpers';
 
 const SymptomChecker = () => {
   const [symptoms, setSymptoms] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
+  const [note, setNote] = useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!symptoms.trim()) return;
 
     setIsLoading(true);
-    
-    // Simulate AI response
-    setTimeout(() => {
-      setResults([
-        {
-          condition: "Common Cold",
-          probability: "High (85%)",
-          severity: "Mild",
-          description: "A viral infection of the upper respiratory tract commonly causing congestion, runny nose, and mild fever.",
-          recommendations: ["Rest and hydration", "Over-the-counter pain relievers", "Warm saltwater gargle"]
-        },
-        {
-          condition: "Seasonal Allergies",
-          probability: "Medium (65%)",
-          severity: "Mild",
-          description: "Allergic reaction to environmental allergens like pollen, dust, or pet dander.",
-          recommendations: ["Antihistamines", "Avoid known allergens", "Keep windows closed during high pollen days"]
-        },
-        {
-          condition: "Sinusitis",
-          probability: "Low (25%)",
-          severity: "Moderate",
-          description: "Inflammation of the sinus cavities, often following a cold or due to allergies.",
-          recommendations: ["Nasal decongestants", "Steam inhalation", "See a doctor if symptoms persist"]
-        }
-      ]);
+    setResults([]);
+    setNote('');
+    try {
+      const res = await import('../lip/api').then(m => m.default.post('/symptoms/check/', { symptoms }));
+      const data = res.data || {};
+      setResults(data.conditions || []);
+      setNote(data.note || '');
+    } catch (error: any) {
+      setResults([]);
+      setNote('Sorry, there was an error analyzing your symptoms.');
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case 'mild': return 'text-green-600 bg-green-100';
-      case 'moderate': return 'text-yellow-600 bg-yellow-100';
-      case 'severe': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+  // Clinic state and handler
+  const [clinics, setClinics] = useState<any[]>([]);
+  const [clinicError, setClinicError] = useState<string | null>(null);
+  const [isClinicLoading, setIsClinicLoading] = useState(false);
+
+
+
+  const handleFindDoctor = () => {
+    if (!navigator.geolocation) {
+      setClinicError('Geolocation is not supported by your browser.');
+      return;
     }
+    setIsClinicLoading(true);
+    setClinicError(null);
+    setClinics([]);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetchNearbyClinics(latitude, longitude);
+          setClinics(res.data.clinics || []);
+        } catch (error) {
+          setClinicError('Could not fetch nearby clinics. Please try again later.');
+        } finally {
+          setIsClinicLoading(false);
+        }
+      },
+      () => {
+        setClinicError('Unable to retrieve your location. Please allow location access.');
+        setIsClinicLoading(false);
+      }
+    );
   };
 
   return (
@@ -121,64 +133,82 @@ const SymptomChecker = () => {
         </div>
 
         {/* Results */}
-        {results.length > 0 && (
+        {(results.length > 0 || note) && (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Possible Conditions</h2>
             {results.map((result, index) => (
               <div key={index} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{result.condition}</h3>
-                    <div className="flex items-center space-x-4 mb-3">
-                      <span className="text-sm text-gray-600">
-                        <strong>Probability:</strong> {result.probability}
-                      </span>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${getSeverityColor(result.severity)}`}>
-                        {result.severity}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {result.severity === 'Mild' && <Thermometer className="h-5 w-5 text-green-500" />}
-                    {result.severity === 'Moderate' && <Clock className="h-5 w-5 text-yellow-500" />}
-                    {result.severity === 'Severe' && <AlertTriangle className="h-5 w-5 text-red-500" />}
-                  </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">{result.name}</h3>
+                <div className="flex items-center space-x-4 mb-3">
+                  {result.probability && (
+                    <span className="text-sm text-gray-600">
+                      <strong>Probability:</strong> {result.probability}
+                    </span>
+                  )}
+                  {result.severity && (
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      result.severity.toLowerCase() === 'mild'
+                        ? 'text-green-600 bg-green-100'
+                        : result.severity.toLowerCase() === 'moderate'
+                        ? 'text-yellow-600 bg-yellow-100'
+                        : result.severity.toLowerCase() === 'severe'
+                        ? 'text-red-600 bg-red-100'
+                        : 'text-gray-600 bg-gray-100'
+                    }`}>
+                      {result.severity}
+                    </span>
+                  )}
                 </div>
-                
-                <p className="text-gray-600 mb-4">{result.description}</p>
-                
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">Recommendations:</h4>
-                  <ul className="space-y-1">
-                    {result.recommendations.map((rec: string, recIndex: number) => (
-                      <li key={recIndex} className="text-sm text-gray-600 flex items-center">
-                        <span className="w-2 h-2 bg-primary rounded-full mr-3 flex-shrink-0"></span>
-                        {rec}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <p className="text-gray-600 mb-4">{result.advice}</p>
               </div>
             ))}
-
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 text-center">
-              <h3 className="font-semibold text-gray-900 mb-2">Need More Help?</h3>
-              <p className="text-gray-600 mb-4">
-                For a more detailed consultation, try our AI assistant or consult with a healthcare professional.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link
-                  to="/chat"
-                  className="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors duration-200"
-                >
-                  Chat with AI Assistant
-                </Link>
-                <button className="border border-primary text-primary px-6 py-2 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors duration-200">
-                  Find a Doctor
-                </button>
+            {(note || true) && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 text-center">
+                {note && <p className="text-gray-700 mb-4">{note}</p>}
+                <h3 className="font-semibold text-gray-900 mb-2">Need More Help?</h3>
+                <p className="text-gray-600 mb-4">
+                  For a more detailed consultation, try our AI assistant or consult with a healthcare professional.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Link
+                    to="/chat"
+                    className="bg-primary text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors duration-200"
+                  >
+                    Chat with AI Assistant
+                  </Link>
+                  <button
+                    onClick={handleFindDoctor}
+                    className="border border-primary text-primary px-6 py-2 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors duration-200"
+                  >
+                    {isClinicLoading ? 'Searching...' : 'Find a Doctor'}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
+        )}
+
+        {/* Clinics Results and Error */}
+        {clinics.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Clinics Near You</h3>
+            <ul className="space-y-4">
+              {clinics.map((clinic, idx) => (
+                <li key={idx} className="bg-white p-4 rounded-lg shadow-md">
+                  <h4 className="text-lg font-semibold text-gray-800">{clinic.name}</h4>
+                  <p className="text-gray-600">{clinic.address}</p>
+                  {clinic.rating && <p className="text-sm text-gray-500">Rating: {clinic.rating}</p>}
+                  <p className="text-sm text-gray-500">
+                    Lat: {clinic.location?.lat}, Lng: {clinic.location?.lng}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {clinicError && (
+          <p className="text-sm text-red-600 mt-4 text-center">{clinicError}</p>
         )}
       </div>
     </div>

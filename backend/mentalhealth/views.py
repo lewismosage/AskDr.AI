@@ -1,0 +1,173 @@
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from .models import JournalEntry, MoodLog
+from .serializers import JournalEntrySerializer, MoodLogSerializer
+import requests
+from django.conf import settings
+from .models import ChatSession, ChatMessage
+import re
+from django.utils import timezone
+from datetime import timedelta
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def anonymous_chat(request):
+    user_input = request.data.get("message", "")
+    session_id = request.data.get("session_id") 
+
+    if not user_input:
+        return Response({"error": "No message provided."}, status=400)
+
+    try:
+        if session_id:
+            try:
+                session = ChatSession.objects.get(id=session_id)
+            except ChatSession.DoesNotExist:
+                session = ChatSession.objects.create()
+        else:
+            session = ChatSession.objects.create()
+
+        # Fetch last N messages (limit for token safety)
+        history = ChatMessage.objects.filter(session=session).order_by("timestamp")[:20]
+        messages = [
+            {"role": "system", "content": (
+                "You are a compassionate and supportive mental health assistant. "
+                "Your tone should be warm, empathetic, and non-judgmental. "
+                "Never give medical diagnoses or prescriptions. "
+                "Encourage the user to seek professional help if they are in crisis."
+            )}
+        ]
+
+        for msg in history:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+
+        # Append new user message
+        messages.append({"role": "user", "content": user_input})
+
+        headers = {
+            "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": "anthropic/claude-3-haiku",
+            "messages": messages
+        }
+
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        data = response.json()
+
+        if response.status_code != 200:
+            return Response({"error": data}, status=response.status_code)
+
+        reply = data["choices"][0]["message"]["content"]
+
+        # Save both messages
+        ChatMessage.objects.create(session=session, role="user", content=user_input)
+        ChatMessage.objects.create(session=session, role="assistant", content=reply)
+
+        # Format the assistant reply
+        formatted = reply.strip()
+        formatted = re.sub(r'(?<!\n)\n(?!\n)', '\n\n', formatted)
+        formatted = re.sub(r'(\s*[-•]\s*)', r'\n\1', formatted)
+
+        return Response({
+            "reply": formatted,
+            "session_id": str(session.id)
+        })
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def save_journal(request):
+    serializer = JournalEntrySerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def log_mood(request):
+    mood = request.data.get("mood")
+    if not mood:
+        return Response({"error": "Mood is required."}, status=400)
+
+    user = request.user if request.user.is_authenticated else None
+    today = timezone.now().date()
+
+    # Only one log per day
+    existing = MoodLog.objects.filter(user=user, logged_at=today).first()
+    if existing:
+        return Response({"message": "Mood already logged for today."})
+
+    MoodLog.objects.create(user=user, mood=mood)
+    return Response({"message": "Mood logged successfully."})
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def mood_history(request):
+    user = request.user if request.user.is_authenticated else None
+    today = timezone.now().date()
+    past_week = today - timedelta(days=6)
+
+    logs = (
+        MoodLog.objects
+        .filter(user=user, logged_at__range=(past_week, today))
+        .order_by("logged_at")
+    )
+
+    data = [
+        {"date": log.logged_at.strftime("%Y-%m-%d"), "mood": log.mood}
+        for log in logs
+    ]
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def nearby_therapists(request):
+    lat = request.data.get("latitude")
+    lng = request.data.get("longitude")
+
+    if not lat or not lng:
+        return Response({"error": "Missing latitude or longitude."}, status=400)
+
+    try:
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            "location": f"{lat},{lng}",
+            "radius": 5000,
+            "type": "health",
+            "keyword": "therapist OR psychologist OR counseling",
+            "key": settings.GOOGLE_MAPS_API_KEY
+        }
+
+        response = requests.get(url, params=params)
+        data = response.json()
+
+        results = []
+        for place in data.get("results", []):
+            results.append({
+                "name": place.get("name"),
+                "rating": place.get("rating"),
+                "user_ratings_total": place.get("user_ratings_total"),
+                "vicinity": place.get("vicinity"),
+                "open_now": place.get("opening_hours", {}).get("open_now"),
+                "location": place.get("geometry", {}).get("location"),
+                "place_id": place.get("place_id")
+            })
+
+        return Response({"therapists": results}, status=200)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

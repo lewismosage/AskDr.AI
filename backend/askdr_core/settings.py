@@ -11,20 +11,19 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 
+
+# settings.py (update dotenv loading)
 from pathlib import Path
-import dotenv, os
+import dotenv
+import os
 from datetime import timedelta
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
+dotenv.load_dotenv(dotenv_path=BASE_DIR / ".env")
 
 # Load .env variables
-dotenv.load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-s^$#5x%ohu(9c#t1+a!xt$mm!e=88-f+vxb+pnl50u4%9%)w=b')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
@@ -61,6 +60,7 @@ INSTALLED_APPS = [
     'billing',
     'reminders',
     'clinics',
+    'mentalhealth',
 ]
 
 

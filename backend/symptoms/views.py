@@ -24,6 +24,8 @@ def check_symptoms(request):
             "  \"conditions\": [\n"
             "    {\n"
             "      \"name\": \"<Condition Name>\",\n"
+            "      \"probability\": \"<Probability as a percentage or qualitative (e.g., High, Medium, Low)>\",\n"
+            "      \"severity\": \"<Severity as Mild, Moderate, or Severe>\",\n"
             "      \"advice\": \"<Clear and safe advice for the user>\"\n"
             "    },\n"
             "    ...\n"

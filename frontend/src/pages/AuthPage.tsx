@@ -64,8 +64,12 @@ const AuthPage = () => {
           // Store tokens
           localStorage.setItem('accessToken', res.data.access);
           localStorage.setItem('refreshToken', res.data.refresh);
-          // Redirect or update UI as needed
-          window.location.href = '/dashboard';
+
+         // Get user profile using the access token
+        const profileRes = await api.get("users/me/");
+        localStorage.setItem("userEmail", profileRes.data.email);
+        // Redirect to home page after sign in
+        window.location.href = "/";
         } else {
           // Sign Up
           const res = await api.post('users/register/', {
@@ -120,7 +124,7 @@ const AuthPage = () => {
           </h2>
           <p className="mt-2 text-gray-600">
             {isSignIn 
-              ? 'Sign in to access your health dashboard' 
+              ? 'Sign in to Get instant health insights, symptom analysis, and medication guidance' 
               : 'Join thousands of users managing their health with AI'
             }
           </p>

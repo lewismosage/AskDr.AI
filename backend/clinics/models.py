@@ -10,7 +10,7 @@ class Clinic(models.Model):
     city = models.CharField(max_length=100, blank=True, null=True)
     country = models.CharField(max_length=100, blank=True, null=True)
     website = models.URLField(blank=True, null=True)
-    is_verified = models.BooleanField(default=False)  # for future partnerships
+    is_verified = models.BooleanField(default=False) 
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

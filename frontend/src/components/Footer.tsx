@@ -40,6 +40,11 @@ const Footer = () => {
                   Medication Guide
                 </Link>
               </li>
+              <li>
+                <Link to="/therapist-connect" className="text-sm text-gray-600 hover:text-primary transition-colors duration-200">
+                  Therapist Connect
+                </Link>
+              </li>
             </ul>
           </div>
 
