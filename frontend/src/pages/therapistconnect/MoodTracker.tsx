@@ -20,6 +20,7 @@ const MoodTracker: React.FC<MoodTrackerProps> = ({ moodOptions }) => {
   const [moodHistory, setMoodHistory] = useState<{ date: string, mood: number }[]>([]);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [wellnessTip, setWellnessTip] = useState<string | null>(null);
 
   const handleMoodSelection = async (mood: number) => {
     setAuthError(null);
@@ -31,7 +32,6 @@ const MoodTracker: React.FC<MoodTrackerProps> = ({ moodOptions }) => {
     setCurrentMood(mood);
     try {
       await axios.post('/mentalhealth/mood/log/', { mood });
-      // Optionally show success toast or UI feedback
     } catch (error: any) {
       if (error?.response?.status === 401 || error?.response?.status === 403) {
         setAuthError('Please sign in to log your mood.');
@@ -60,8 +60,17 @@ const MoodTracker: React.FC<MoodTrackerProps> = ({ moodOptions }) => {
         setIsAuthenticated(false);
       }
     }
+    async function fetchWellnessTip() {
+      try {
+        const res = await axios.get('/mentalhealth/wellness-tip/');
+        setWellnessTip(res.data && res.data.tip ? res.data.tip : null);
+      } catch {
+        setWellnessTip(null);
+      }
+    }
     fetchMoodHistory();
     checkAuth();
+    fetchWellnessTip();
   }, []);
 
   return (
@@ -139,7 +148,7 @@ const MoodTracker: React.FC<MoodTrackerProps> = ({ moodOptions }) => {
           <div className="p-4 bg-green-50 rounded-lg">
             <h4 className="font-medium text-green-900 mb-2">Today's Wellness Tip</h4>
             <p className="text-sm text-green-800">
-              Try the 5-4-3-2-1 grounding technique: Notice 5 things you see, 4 you can touch, 3 you hear, 2 you smell, and 1 you taste.
+              {wellnessTip ? wellnessTip : "Check back at 8am for today's wellness tip!"}
             </p>
           </div>
         </div>

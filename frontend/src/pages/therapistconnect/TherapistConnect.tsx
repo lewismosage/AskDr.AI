@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import axios from '../../lip/api';
 import AnonymousChat from './AnonymousChat';
 import FindTherapist from './FindTherapist';
 import JournalTab from './JournalTab';
@@ -29,6 +30,9 @@ interface Therapist {
 const TherapistConnect = () => {
   const [activeTab, setActiveTab] = useState<'chat' | 'connect' | 'journal' | 'mood'>('chat');
   const [journalEntry, setJournalEntry] = useState('');
+  const [journalPrompts, setJournalPrompts] = useState<string[]>([]);
+  const [promptsLoading, setPromptsLoading] = useState(false);
+  const [promptsError, setPromptsError] = useState<string | null>(null);
 
 
   const therapists: Therapist[] = [
@@ -87,15 +91,26 @@ const TherapistConnect = () => {
     { value: 5, emoji: "😊", label: "Great" }
   ];
 
-  const journalPrompts = [
-    "What are three things you're grateful for today?",
-    "Describe a moment when you felt truly at peace.",
-    "What would you tell your younger self about handling difficult emotions?",
-    "Write about a challenge you overcame and how it made you stronger.",
-    "What does self-care look like for you right now?"
-  ];
 
-
+  useEffect(() => {
+    async function fetchPrompts() {
+      setPromptsLoading(true);
+      setPromptsError(null);
+      try {
+        const res = await axios.get('/mentalhealth/journal-prompts/');
+        if (Array.isArray(res.data?.prompts)) {
+          setJournalPrompts(res.data.prompts);
+        } else {
+          setPromptsError('Failed to load prompts.');
+        }
+      } catch (err) {
+        setPromptsError('Failed to load prompts.');
+      } finally {
+        setPromptsLoading(false);
+      }
+    }
+    fetchPrompts();
+  }, []);
 
 
   return (
@@ -113,7 +128,7 @@ const TherapistConnect = () => {
       {/* Navigation Tabs */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-8">
+          <nav className="flex space-x-8 overflow-x-auto whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             {[
               { id: 'chat', label: 'Anonymous Chat', icon: MessageCircle },
               { id: 'connect', label: 'Find Therapist', icon: Heart },
@@ -155,6 +170,8 @@ const TherapistConnect = () => {
             journalPrompts={journalPrompts}
             journalEntry={journalEntry}
             setJournalEntry={setJournalEntry}
+            promptsLoading={promptsLoading}
+            promptsError={promptsError}
           />
         )}
 
