@@ -1,3 +1,4 @@
+// src/components/common/AlertModal.tsx
 import { ReactNode } from 'react';
 import { AlertCircle, Check, Info, X } from 'lucide-react';
 
@@ -11,7 +12,6 @@ interface AlertModalProps {
   type?: 'info' | 'success' | 'warning' | 'error' | 'confirm';
   confirmText?: string;
   cancelText?: string;
-  customContent?: React.ReactNode;
 }
 
 export default function AlertModal({
@@ -28,27 +28,27 @@ export default function AlertModal({
   if (!isOpen) return null;
 
   const iconMap = {
-    info: <Info className="w-6 h-6 text-blue-500" />,
+    info: <Info className="w-6 h-6 text-green-500" />,
     success: <Check className="w-6 h-6 text-green-500" />,
     warning: <AlertCircle className="w-6 h-6 text-yellow-500" />,
     error: <AlertCircle className="w-6 h-6 text-red-500" />,
-    confirm: <Info className="w-6 h-6 text-blue-500" />
+    confirm: <Info className="w-6 h-6 text-green-500" />
   };
 
   const typeColorMap = {
-    info: 'bg-blue-50',
+    info: 'bg-green-50',
     success: 'bg-green-50',
     warning: 'bg-yellow-50',
     error: 'bg-red-50',
-    confirm: 'bg-blue-50'
+    confirm: 'bg-green-50'
   };
 
   const buttonColorMap = {
-    info: 'bg-blue-600 hover:bg-blue-700',
+    info: 'bg-green-600 hover:bg-green-700',
     success: 'bg-green-600 hover:bg-green-700',
     warning: 'bg-yellow-600 hover:bg-yellow-700',
     error: 'bg-red-600 hover:bg-red-700',
-    confirm: 'bg-blue-600 hover:bg-blue-700'
+    confirm: 'bg-green-600 hover:bg-green-700'
   };
 
   return (

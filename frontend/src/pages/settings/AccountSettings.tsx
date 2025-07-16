@@ -2,16 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { User, Mail, Shield, Trash2, Lock, Eye, EyeOff, XCircle } from 'lucide-react';
 import api from '../../lip/api';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import AlertModal from '../../components/common/AlertModal';
 
-interface AccountSettingsProps {
-  onDeleteAccount: () => void;
-  showDeleteConfirm: boolean;
-}
-
-const AccountSettings: React.FC<AccountSettingsProps> = ({
-  onDeleteAccount,
-  showDeleteConfirm
-}) => {
+const AccountSettings: React.FC = () => {
   const [profile, setProfile] = useState({
     name: '',
     email: ''
@@ -20,6 +13,8 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [error, setError] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [showDeleteInput, setShowDeleteInput] = useState(false);
   
   // Modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -32,6 +27,37 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
     confirm: ''
   });
   const [passwordError, setPasswordError] = useState('');
+
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info' as 'info' | 'success' | 'warning' | 'error' | 'confirm',
+    onConfirm: undefined as (() => void) | undefined,
+    onCancel: undefined as (() => void) | undefined
+  });
+
+  const showAlert = (
+    title: string, 
+    message: string, 
+    type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info', 
+    onConfirm?: () => void, 
+    onCancel?: () => void
+  ) => {
+    setAlertModal({
+      isOpen: true,
+      title,
+      message,
+      type,
+      onConfirm,
+      onCancel
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertModal(prev => ({ ...prev, isOpen: false }));
+  };
 
   // Fetch user profile
   useEffect(() => {
@@ -57,13 +83,11 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
       const updatedProfile = { ...profile, [key]: value };
       setProfile(updatedProfile);
       
-      // Update backend
       await api.patch('users/me/', { 
         [key === 'name' ? 'full_name' : key]: value 
       });
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to update profile');
-      // Revert on error
       setProfile(prev => ({ ...prev }));
     }
   };
@@ -86,11 +110,10 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
         new_password: passwordForm.new
       });
       
-      // Reset form on success
       setPasswordForm({ current: '', new: '', confirm: '' });
       setPasswordError('');
       setShowPasswordModal(false);
-      alert('Password updated successfully!');
+      showAlert('Success', 'Password updated successfully!', 'success');
     } catch (err: any) {
       setPasswordError(err.response?.data?.detail || 'Failed to change password');
     } finally {
@@ -99,12 +122,43 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
   };
 
   const handleDeleteAccount = async () => {
-    setIsDeletingAccount(true);
-    try {
-      await onDeleteAccount();
-    } finally {
-      setIsDeletingAccount(false);
+    if (!showDeleteInput) {
+      setShowDeleteInput(true);
+      return;
     }
+
+    if (deleteConfirmation !== 'DELETE') {
+      showAlert('Error', 'Please type "DELETE" to confirm account deletion', 'error');
+      return;
+    }
+
+    showAlert(
+      'Confirm Deletion', 
+      'Are you sure you want to permanently delete your account? This action cannot be undone.',
+      'confirm',
+      async () => {
+        setIsDeletingAccount(true);
+        try {
+          await api.delete('users/delete_account/');
+          
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('userEmail');
+          
+          window.location.href = '/';
+        } catch (err: any) {
+          showAlert('Error', err.response?.data?.detail || 'Failed to delete account. Please try again.', 'error');
+        } finally {
+          setIsDeletingAccount(false);
+          setDeleteConfirmation('');
+          setShowDeleteInput(false);
+        }
+      },
+      () => {
+        setDeleteConfirmation('');
+        setShowDeleteInput(false);
+      }
+    );
   };
 
   if (loading) {
@@ -184,6 +238,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
             </button>
           </div>
         </div>
+        
         {/* Password Modal */}
         {showPasswordModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
@@ -304,11 +359,25 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
               <p className="text-sm text-red-600">
                 Permanently delete your account and all associated data.
               </p>
+              {showDeleteInput && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-red-700 mb-1">
+                    Type "DELETE" to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmation}
+                    onChange={(e) => setDeleteConfirmation(e.target.value)}
+                    className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    placeholder="Type DELETE to confirm"
+                  />
+                </div>
+              )}
             </div>
             <button
               onClick={handleDeleteAccount}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center justify-center gap-2 min-w-[120px] ${
-                showDeleteConfirm
+                showDeleteInput
                   ? 'bg-red-600 text-white hover:bg-red-700'
                   : 'border border-red-300 text-red-700 hover:bg-red-50'
               }`}
@@ -319,11 +388,24 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
                   <LoadingSpinner size="sm" color="white" />
                   Deleting...
                 </>
-              ) : showDeleteConfirm ? 'Click to Confirm' : 'Delete Account'}
+              ) : showDeleteInput ? 'Confirm Deletion' : 'Delete Account'}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={closeAlert}
+        onConfirm={alertModal.onConfirm}
+        onCancel={alertModal.onCancel}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        confirmText="Confirm"
+        cancelText="Cancel"
+      />
     </div>
   );
 };
