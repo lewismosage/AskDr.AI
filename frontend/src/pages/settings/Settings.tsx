@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Settings, Bell, Palette, Link, Database, User } from 'lucide-react';
+import { Settings, Bell, Link, User } from 'lucide-react';
 import GeneralSettings from './GeneralSettings';
 import NotificationSettings from './NotificationSettings';
 import ConnectedAppsSettings from './ConnectedAppsSettings';
@@ -19,7 +18,6 @@ const settingsCategories: SettingsItem[] = [
   { id: 'account', title: 'Account', icon: <User size={18} /> },
 ];
 
-
 const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('general');
 
@@ -27,25 +25,6 @@ const SettingsPage: React.FC = () => {
   const [theme, setTheme] = useState<string>('light');
   const [language, setLanguage] = useState<string>('en');
   const [timezone, setTimezone] = useState<string>('UTC-8');
-
-  // Notification settings state
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    medicationReminders: false,
-    appointmentReminders: false,
-    healthTips: true,
-    weeklyReports: false,
-  });
-
-
-  // Account settings state
-  const [profile, setProfile] = useState({
-    name: 'John Doe',
-    email: 'john@example.com',
-    phone: '+1234567890',
-  });
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Connected apps state
   const [connectedApps, setConnectedApps] = useState([
@@ -66,10 +45,10 @@ const SettingsPage: React.FC = () => {
       scopes: ['sleep', 'activity'],
     },
   ]);
+
   // Connected apps handlers
   const handleRevokeAccess = (appId: string) => {
     setConnectedApps((prev) => prev.filter((app) => app.id !== appId));
-    alert('App access revoked!');
   };
 
   const handleViewPermissions = (appId: string) => {
@@ -106,26 +85,6 @@ const SettingsPage: React.FC = () => {
     if (key === 'timezone') setTimezone(value);
   };
 
-  const handleNotificationSettingChange = (key: string, value: boolean) => {
-    setNotificationSettings((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleProfileChange = (key: string, value: string) => {
-    setProfile((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleDeleteAccount = () => {
-    if (!showDeleteConfirm) {
-      setShowDeleteConfirm(true);
-      setTimeout(() => setShowDeleteConfirm(false), 3000);
-    } else {
-      // Actual delete logic here
-      alert('Account deleted!');
-      setShowDeleteConfirm(false);
-    }
-  };
-
-
   const renderTabContent = () => {
     switch (activeTab) {
       case 'general':
@@ -141,12 +100,7 @@ const SettingsPage: React.FC = () => {
           />
         );
       case 'notifications':
-        return (
-          <NotificationSettings
-            settings={notificationSettings}
-            onSettingChange={handleNotificationSettingChange}
-          />
-        );
+        return <NotificationSettings />;
       case 'connected-apps':
         return (
           <ConnectedAppsSettings
@@ -156,14 +110,7 @@ const SettingsPage: React.FC = () => {
           />
         );
       case 'account':
-        return (
-          <AccountSettings
-            profile={profile}
-            onProfileChange={handleProfileChange}
-            onDeleteAccount={handleDeleteAccount}
-            showDeleteConfirm={showDeleteConfirm}
-          />
-        );
+        return <AccountSettings />;
       default:
         return null;
     }

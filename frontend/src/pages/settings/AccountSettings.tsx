@@ -7,7 +7,8 @@ import AlertModal from '../../components/common/AlertModal';
 const AccountSettings: React.FC = () => {
   const [profile, setProfile] = useState({
     name: '',
-    email: ''
+    email: '',
+    phone: ''
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -16,7 +17,6 @@ const AccountSettings: React.FC = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [showDeleteInput, setShowDeleteInput] = useState(false);
   
-  // Modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -28,7 +28,6 @@ const AccountSettings: React.FC = () => {
   });
   const [passwordError, setPasswordError] = useState('');
 
-  // Alert modal state
   const [alertModal, setAlertModal] = useState({
     isOpen: false,
     title: '',
@@ -59,14 +58,14 @@ const AccountSettings: React.FC = () => {
     setAlertModal(prev => ({ ...prev, isOpen: false }));
   };
 
-  // Fetch user profile
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         const response = await api.get('users/me/');
         setProfile({
           name: response.data.full_name || '',
-          email: response.data.email
+          email: response.data.email,
+          phone: response.data.phone || ''
         });
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load profile');
@@ -186,7 +185,6 @@ const AccountSettings: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* Profile Information Section */}
       <div>
         <h2 className="text-xl font-semibold mb-4 flex items-center">
           <User className="h-5 w-5 mr-2" />
@@ -220,7 +218,6 @@ const AccountSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* Security Section */}
       <div>
         <h2 className="text-xl font-semibold mb-4 flex items-center">
           <Shield className="h-5 w-5 mr-2" />
@@ -239,7 +236,6 @@ const AccountSettings: React.FC = () => {
           </div>
         </div>
         
-        {/* Password Modal */}
         {showPasswordModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
             <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md relative">
@@ -344,7 +340,6 @@ const AccountSettings: React.FC = () => {
         )}
       </div>
 
-      {/* Danger Zone */}
       <div className="border border-red-200 rounded-lg">
         <div className="p-4 border-b border-red-100 bg-red-50 rounded-t-lg">
           <h2 className="text-lg font-semibold text-red-900 flex items-center">
@@ -394,7 +389,6 @@ const AccountSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* Alert Modal */}
       <AlertModal
         isOpen={alertModal.isOpen}
         onClose={closeAlert}
