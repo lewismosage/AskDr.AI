@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Mail, Lock, User, Chrome } from 'lucide-react';
 import api from '../../lip/api';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 const AuthPage = () => {
   const [isSignIn, setIsSignIn] = useState(true);
@@ -78,7 +79,7 @@ const AuthPage = () => {
             username: formData.email,
             email: formData.email,
             password: formData.password,
-            name: formData.name,
+            full_name: formData.name,
           });
           // Optionally auto-login after registration
           // Redirect to sign in or dashboard
@@ -316,13 +317,10 @@ const AuthPage = () => {
               className="w-full bg-primary text-white py-3 px-4 rounded-lg font-semibold hover:bg-primary-dark transition-colors duration-200 focus:ring-2 focus:ring-primary focus:ring-offset-2 flex items-center justify-center"
               disabled={loading}
             >
-              {loading && isSignIn ? (
+              {loading ? (
                 <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                  </svg>
-                  Signing in...
+                  <LoadingSpinner size="sm" color="white" />
+                  {isSignIn ? 'Signing in...' : 'Creating account...'}
                 </span>
               ) : isSignIn ? 'Sign In' : 'Create Account'}
             </button>

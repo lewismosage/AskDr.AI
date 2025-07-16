@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Footer from './components/Footer';
+import Navbar from './components/layout/Navbar';
+import Footer from './components/layout/Footer';
 import LandingPage from './pages/home/LandingPage';
 import SymptomChecker from './pages/SymptomChecker';
 import ChatAssistant from './pages/ChatAssistant';

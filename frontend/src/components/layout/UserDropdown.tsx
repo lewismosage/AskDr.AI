@@ -1,8 +1,8 @@
 // components/UserDropdown.tsx
 import React, { useState, useRef, useEffect } from "react";
 import { LogOut, Settings, Star, Bell, User, ChevronRight, HelpCircle, FileText, Download } from "lucide-react";
-import SettingsModal from "../pages/settings/SettingsModal";
-import SettingsContent from "../pages/settings/Settings";
+import SettingsModal from "../../pages/settings/SettingsModal";
+import SettingsContent from "../../pages/settings/Settings";
 
 type UserDropdownProps = {
   email: string;

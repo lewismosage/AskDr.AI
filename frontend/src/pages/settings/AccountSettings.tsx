@@ -1,23 +1,26 @@
-import React, { useState } from 'react';
-import { User, Mail, Phone, Shield, Trash2, Lock, Eye, EyeOff, XCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Shield, Trash2, Lock, Eye, EyeOff, XCircle } from 'lucide-react';
+import api from '../../lip/api';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 interface AccountSettingsProps {
-  profile: {
-    name: string;
-    email: string;
-    phone: string;
-  };
-  onProfileChange: (key: string, value: string) => void;
   onDeleteAccount: () => void;
   showDeleteConfirm: boolean;
 }
 
 const AccountSettings: React.FC<AccountSettingsProps> = ({
-  profile,
-  onProfileChange,
   onDeleteAccount,
   showDeleteConfirm
 }) => {
+  const [profile, setProfile] = useState({
+    name: '',
+    email: ''
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  
   // Modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -30,7 +33,42 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
   });
   const [passwordError, setPasswordError] = useState('');
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  // Fetch user profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get('users/me/');
+        setProfile({
+          name: response.data.full_name || '',
+          email: response.data.email
+        });
+      } catch (err: any) {
+        setError(err.response?.data?.detail || 'Failed to load profile');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  const handleProfileChange = async (key: string, value: string) => {
+    try {
+      const updatedProfile = { ...profile, [key]: value };
+      setProfile(updatedProfile);
+      
+      // Update backend
+      await api.patch('users/me/', { 
+        [key === 'name' ? 'full_name' : key]: value 
+      });
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to update profile');
+      // Revert on error
+      setProfile(prev => ({ ...prev }));
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordForm.new !== passwordForm.confirm) {
       setPasswordError('New passwords do not match');
@@ -40,12 +78,57 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
       setPasswordError('Password must be at least 8 characters');
       return;
     }
-    // Simulate password update
-    setPasswordForm({ current: '', new: '', confirm: '' });
-    setPasswordError('');
-    setShowPasswordModal(false);
-    alert('Password updated!');
+
+    setIsUpdatingPassword(true);
+    try {
+      await api.post('users/change_password/', {
+        old_password: passwordForm.current,
+        new_password: passwordForm.new
+      });
+      
+      // Reset form on success
+      setPasswordForm({ current: '', new: '', confirm: '' });
+      setPasswordError('');
+      setShowPasswordModal(false);
+      alert('Password updated successfully!');
+    } catch (err: any) {
+      setPasswordError(err.response?.data?.detail || 'Failed to change password');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      await onDeleteAccount();
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner size="lg" color="primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border-l-4 border-red-400 p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <XCircle className="h-5 w-5 text-red-400" />
+          </div>
+          <div className="ml-3">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -55,32 +138,30 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
           <User className="h-5 w-5 mr-2" />
           Profile Information
         </h2>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <User className="h-4 w-4 mr-1" />
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={profile.name}
-                onChange={(e) => onProfileChange('name', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <Mail className="h-4 w-4 mr-1" />
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={profile.email}
-                onChange={(e) => onProfileChange('email', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-              />
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <User className="h-4 w-4 mr-1" />
+              Full Name
+            </label>
+            <input
+              type="text"
+              value={profile.name}
+              onChange={(e) => handleProfileChange('name', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <Mail className="h-4 w-4 mr-1" />
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={profile.email}
+              onChange={(e) => handleProfileChange('email', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+            />
           </div>
         </div>
       </div>
@@ -94,7 +175,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
         <div className="space-y-4">
           <div className="p-4 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-medium text-gray-900 mb-1">Password</h3>
-            <p className="text-sm text-gray-600 mb-3">Last changed 3 months ago</p>
+            <p className="text-sm text-gray-600 mb-3">Last changed recently</p>
             <button
               className="text-primary hover:text-primary-dark font-medium text-sm"
               onClick={() => setShowPasswordModal(true)}
@@ -191,9 +272,15 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors duration-200"
+                    className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors duration-200 flex items-center justify-center gap-2 min-w-[120px]"
+                    disabled={isUpdatingPassword}
                   >
-                    Update Password
+                    {isUpdatingPassword ? (
+                      <>
+                        <LoadingSpinner size="sm" color="white" />
+                        Updating...
+                      </>
+                    ) : 'Update Password'}
                   </button>
                 </div>
               </form>
@@ -219,14 +306,20 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({
               </p>
             </div>
             <button
-              onClick={onDeleteAccount}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+              onClick={handleDeleteAccount}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center justify-center gap-2 min-w-[120px] ${
                 showDeleteConfirm
                   ? 'bg-red-600 text-white hover:bg-red-700'
                   : 'border border-red-300 text-red-700 hover:bg-red-50'
               }`}
+              disabled={isDeletingAccount}
             >
-              {showDeleteConfirm ? 'Click to Confirm' : 'Delete Account'}
+              {isDeletingAccount ? (
+                <>
+                  <LoadingSpinner size="sm" color="white" />
+                  Deleting...
+                </>
+              ) : showDeleteConfirm ? 'Click to Confirm' : 'Delete Account'}
             </button>
           </div>
         </div>
