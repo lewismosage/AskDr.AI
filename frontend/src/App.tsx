@@ -2,13 +2,15 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import LandingPage from './pages/LandingPage';
+import LandingPage from './pages/home/LandingPage';
 import SymptomChecker from './pages/SymptomChecker';
 import ChatAssistant from './pages/ChatAssistant';
 import MedicationQA from './pages/MedicationQA';
 import Reminders from './pages/Reminders';
-import SubscriptionPlans from './pages/SubscriptionPlans';
-import AuthPage from './pages/AuthPage';
+import SubscriptionPlans from './pages/pricing/SubscriptionPlans';
+import AuthPage from './pages/auth/AuthPage';
+import HelpCenter from './pages/HelpCenter';
+import Policies from './pages/policies/Policies';
 import ThankYou from './pages/ThankYou';
 import NotFound from './pages/NotFound';
 import TherapistConnect from './pages/therapistconnect/TherapistConnect';
@@ -27,6 +29,8 @@ function App() {
             <Route path="/therapist-connect" element={<TherapistConnect />} />
             <Route path="/reminders" element={<Reminders />} />
             <Route path="/plans" element={<SubscriptionPlans />} />
+            <Route path="/help-center" element={<HelpCenter />} />
+            <Route path="/terms" element={<Policies />} />
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/thank-you" element={<ThankYou />} />
             <Route path="*" element={<NotFound />} />

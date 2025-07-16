@@ -1,5 +1,5 @@
 import React from 'react';
-import YourHealth from '../assets/StartYourHealth.jpg'
+import YourHealth from '../../assets/StartYourHealth.jpg'
 import { Link } from 'react-router-dom';
 import { ArrowRight, Stethoscope, Pill, Bell, CheckCircle, Heart  } from 'lucide-react';
 

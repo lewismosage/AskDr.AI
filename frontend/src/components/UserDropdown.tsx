@@ -106,13 +106,6 @@ const UserDropdown: React.FC<UserDropdownProps> = ({ email }) => {
                     Help center
                   </a>
                   <a
-                    href="/release-notes"
-                    className="flex items-center px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <FileText className="w-5 h-5 mr-3 text-gray-500" />
-                    Release notes
-                  </a>
-                  <a
                     href="/terms"
                     className="flex items-center px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"
                   >

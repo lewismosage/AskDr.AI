@@ -59,13 +59,8 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
-                <a href="#" className="text-sm text-gray-600 hover:text-primary transition-colors duration-200">
+                <a href="/help-center" className="text-sm text-gray-600 hover:text-primary transition-colors duration-200">
                   Help Center
-                </a>
-              </li>
-              <li>
-                <a href="#" className="text-sm text-gray-600 hover:text-primary transition-colors duration-200">
-                  Contact Us
                 </a>
               </li>
             </ul>

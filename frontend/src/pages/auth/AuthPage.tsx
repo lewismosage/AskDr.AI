@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Mail, Lock, User, Chrome } from 'lucide-react';
-import api from '../lip/api';
+import api from '../../lip/api';
 
 const AuthPage = () => {
   const [isSignIn, setIsSignIn] = useState(true);
@@ -13,6 +13,7 @@ const AuthPage = () => {
     confirmPassword: ''
   });
   const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [loading, setLoading] = useState(false);
 
   const validatePassword = (password: string) => {
     if (password.length < 8) return 'Password must be at least 8 characters';
@@ -54,6 +55,7 @@ const AuthPage = () => {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
+      setLoading(true);
       try {
         if (isSignIn) {
           // Sign In
@@ -65,11 +67,11 @@ const AuthPage = () => {
           localStorage.setItem('accessToken', res.data.access);
           localStorage.setItem('refreshToken', res.data.refresh);
 
-         // Get user profile using the access token
-        const profileRes = await api.get("users/me/");
-        localStorage.setItem("userEmail", profileRes.data.email);
-        // Redirect to home page after sign in
-        window.location.href = "/";
+          // Get user profile using the access token
+          const profileRes = await api.get("users/me/");
+          localStorage.setItem("userEmail", profileRes.data.email);
+          // Redirect to home page after sign in
+          window.location.href = "/";
         } else {
           // Sign Up
           const res = await api.post('users/register/', {
@@ -87,13 +89,43 @@ const AuthPage = () => {
           // Map backend errors to form
           const apiErrors = err.response.data;
           const mappedErrors: {[key: string]: string} = {};
-          for (const key in apiErrors) {
-            mappedErrors[key] = Array.isArray(apiErrors[key]) ? apiErrors[key][0] : apiErrors[key];
+          // Custom error handling for login
+          if (isSignIn) {
+            if (apiErrors.detail) {
+              // Always show a generic error for login failures
+              if (
+                apiErrors.detail === 'No active account found with the given credentials' ||
+                apiErrors.detail === 'User not found' ||
+                apiErrors.detail.toLowerCase().includes('no active account') ||
+                apiErrors.detail === 'Invalid credentials' ||
+                apiErrors.detail.toLowerCase().includes('invalid')
+              ) {
+                mappedErrors.password = 'Incorrect email or password.';
+                mappedErrors.general = 'Incorrect email or password.';
+              } else {
+                mappedErrors.general = apiErrors.detail;
+              }
+            } else {
+              // Other field errors
+              for (const key in apiErrors) {
+                mappedErrors[key] = Array.isArray(apiErrors[key]) ? apiErrors[key][0] : apiErrors[key];
+              }
+            }
+          } else {
+            // Sign Up errors
+            for (const key in apiErrors) {
+              mappedErrors[key] = Array.isArray(apiErrors[key]) ? apiErrors[key][0] : apiErrors[key];
+            }
+            if (apiErrors.detail) {
+              mappedErrors.general = apiErrors.detail;
+            }
           }
           setErrors(mappedErrors);
         } else {
           setErrors({ general: 'An unexpected error occurred.' });
         }
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -157,6 +189,12 @@ const AuthPage = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* General error message */}
+            {errors.general && (
+              <div className="mb-4 text-center text-sm text-red-600 font-medium">
+                {errors.general}
+              </div>
+            )}
             {/* Name field (Sign Up only) */}
             {!isSignIn && (
               <div>
@@ -275,9 +313,18 @@ const AuthPage = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full bg-primary text-white py-3 px-4 rounded-lg font-semibold hover:bg-primary-dark transition-colors duration-200 focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              className="w-full bg-primary text-white py-3 px-4 rounded-lg font-semibold hover:bg-primary-dark transition-colors duration-200 focus:ring-2 focus:ring-primary focus:ring-offset-2 flex items-center justify-center"
+              disabled={loading}
             >
-              {isSignIn ? 'Sign In' : 'Create Account'}
+              {loading && isSignIn ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                  </svg>
+                  Signing in...
+                </span>
+              ) : isSignIn ? 'Sign In' : 'Create Account'}
             </button>
 
             {/* Divider */}
