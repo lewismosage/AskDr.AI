@@ -14,6 +14,7 @@ import Policies from "./pages/policies/Policies";
 import ThankYou from "./pages/ThankYou";
 import NotFound from "./pages/NotFound";
 import TherapistConnect from "./pages/therapistconnect/TherapistConnect";
+import { RequireAuth } from "./services/RequireAuth";
 
 function App() {
   return (
@@ -24,7 +25,14 @@ function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/symptom-checker" element={<SymptomChecker />} />
-            <Route path="/chat" element={<ChatAssistant />} />
+            <Route 
+              path="/chat" 
+              element={
+                <RequireAuth>
+                  <ChatAssistant />
+                </RequireAuth>
+              } 
+            />
             <Route path="/medication-qa" element={<MedicationQA />} />
             <Route path="/therapist-connect" element={<TherapistConnect />} />
             <Route path="/reminders" element={<Reminders />} />

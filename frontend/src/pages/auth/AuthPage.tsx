@@ -72,7 +72,8 @@ const AuthPage = () => {
           const profileRes = await api.get("users/me/");
           localStorage.setItem("userEmail", profileRes.data.email);
           // Redirect to home page after sign in
-          window.location.href = "/";
+          const from = new URLSearchParams(window.location.search).get('from') || '/';
+          window.location.href = from;
         } else {
           // Sign Up
           const res = await api.post('users/register/', {
