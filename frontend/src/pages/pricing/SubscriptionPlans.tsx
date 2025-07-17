@@ -36,7 +36,6 @@ const SubscriptionPlans = () => {
     price: string;
     billingCycle: BillingCycle;
   } | null>(null);
-  // Removed useAuth
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -128,7 +127,16 @@ const SubscriptionPlans = () => {
       // Handle free plan directly
       return;
     }
-    // Directly proceed to payment for paid plans (no auth check)
+
+    // Check if user is authenticated
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      // Redirect to auth page with return URL
+      navigate(`/auth?from=${encodeURIComponent(location.pathname)}`);
+      return;
+    }
+
+    // Proceed to payment for authenticated users
     setSelectedPlan({
       name: plan.name,
       price: plan.price[billingCycle],
