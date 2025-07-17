@@ -28,3 +28,17 @@ def record_feature_usage(request):
         return Response({'success': True})
     except UserProfile.DoesNotExist:
         return Response({'success': False}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_chat_access(request):
+    try:
+        profile = request.user.profile
+        return Response({
+            'has_access': profile.can_use_chat_feature(),
+            'messages_used': profile.monthly_chat_messages_used,
+            'messages_allowed': 10 if profile.plan == 'free' else (0 if profile.plan == 'none' else float('inf')),
+            'plan': profile.plan
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)

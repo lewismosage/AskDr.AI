@@ -15,6 +15,7 @@ class UserProfile(models.Model):
     stripe_subscription_id = models.CharField(max_length=100, blank=True, null=True)
     monthly_symptom_checks_used = models.PositiveIntegerField(default=0)
     last_reset_date = models.DateField(auto_now_add=True)
+    monthly_chat_messages_used = models.PositiveIntegerField(default=0)
     
     def __str__(self):
         return f"{self.user.username} - {self.plan}"
@@ -92,3 +93,16 @@ class UserProfile(models.Model):
             except stripe.error.StripeError:
                 return False
         return False
+
+    def can_use_chat_feature(self):
+        self.reset_usage_if_needed()  # Reset counters if new month
+        if self.plan in ['plus', 'pro']:
+            return True  # Unlimited access
+        # Free plan limits
+        max_messages = 10 if self.plan == 'free' else 5
+        return self.monthly_chat_messages_used < max_messages
+
+    def record_chat_message(self):
+        if self.plan in ['free']:
+            self.monthly_chat_messages_used += 1
+            self.save()

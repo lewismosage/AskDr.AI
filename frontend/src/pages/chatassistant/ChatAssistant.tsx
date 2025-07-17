@@ -3,6 +3,7 @@ import { Send, Bot, User, Lock } from "lucide-react";
 import axios from "../../lip/api";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
+import api from "../../lip/api";
 
 interface Message {
   id: number;
@@ -29,6 +30,10 @@ const ChatAssistant = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState(0);
   const [showLimitMessage, setShowLimitMessage] = useState(false);
+  const [userPlan, setUserPlan] = useState<"free" | "plus" | "pro" | null>(
+    null
+  );
+  const [messagesAllowed, setMessagesAllowed] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +58,26 @@ const ChatAssistant = () => {
     }
   }, []);
 
+  // Check backend access for authenticated users
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        const response = await api.get("/features/check-chat-access/");
+        setUserPlan(response.data.plan);
+        setMessagesAllowed(response.data.messages_allowed);
+        if (!response.data.has_access) {
+          setShowLimitMessage(true);
+        }
+      } catch (error) {
+        console.error("Error checking chat access:", error);
+      }
+    };
+    const accessToken = localStorage.getItem("accessToken");
+    if (accessToken) {
+      checkAccess();
+    }
+  }, [localStorage.getItem("accessToken")]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -71,89 +96,112 @@ const ChatAssistant = () => {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const accessToken = localStorage.getItem("accessToken");
-    if (!inputMessage.trim() || isTyping || (showLimitMessage && !accessToken))
-      return;
+  // Update the error handling in handleSendMessage
+const handleSendMessage = async (e: React.FormEvent) => {
+  e.preventDefault();
+  const accessToken = localStorage.getItem("accessToken");
+  if (!inputMessage.trim() || isTyping || (showLimitMessage && !accessToken))
+    return;
 
-    const userMessage: Message = {
-      id: messages.length + 1,
-      text: inputMessage,
-      sender: "user",
+  const userMessage: Message = {
+    id: messages.length + 1,
+    text: inputMessage,
+    sender: "user",
+    timestamp: new Date(),
+  };
+
+  setMessages((prev) => [...prev, userMessage]);
+  setInputMessage("");
+  setIsTyping(true);
+
+  if (!accessToken) {
+    incrementMessageCount();
+  }
+
+  try {
+    const headers = accessToken
+      ? {
+          Authorization: `Bearer ${accessToken}`,
+        }
+      : {};
+
+    const res = await axios.post(
+      "/chat/ask/",
+      {
+        question: inputMessage,
+        ...(sessionId ? { session_id: sessionId } : {}),
+      },
+      { headers }
+    );
+
+    const data = res.data || {};
+    if (!sessionId && data.session_id) {
+      setSessionId(data.session_id);
+    }
+
+    let aiText = "";
+    if (typeof data.summary === "string" && data.summary.trim()) {
+      aiText += data.summary.trim();
+    }
+    if (
+      Array.isArray(data.recommendations) &&
+      data.recommendations.length > 0
+    ) {
+      aiText += (aiText ? "\n\n" : "") + "Recommendations:";
+      data.recommendations.forEach((rec: string) => {
+        aiText += `\n- ${rec}`;
+      });
+    }
+    if (!aiText) {
+      aiText = "Sorry, I could not understand the response.";
+    }
+
+    const aiResponse: Message = {
+      id: messages.length + 2,
+      text: aiText,
+      sender: "ai",
       timestamp: new Date(),
     };
+    setMessages((prev) => [...prev, aiResponse]);
+  } catch (error: any) {
+    let errorMsg =
+      "Sorry, there was an error getting a response from the assistant.";
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInputMessage("");
-    setIsTyping(true);
-
-    if (!accessToken) {
-      incrementMessageCount();
+    if (error?.response?.data?.error === "message_limit_reached") {
+      errorMsg = `You've reached your monthly message limit. ${
+        userPlan === "free"
+          ? "Upgrade your plan to continue chatting."
+          : "Please try again next month."
+      }`;
+      
+      // Force update the UI to show upgrade options
+      if (!userPlan) {
+        try {
+          const response = await api.get("/api/features/check-chat-access/");
+          setUserPlan(response.data.plan);
+          setMessagesAllowed(response.data.messages_allowed);
+        } catch (err) {
+          console.error("Error checking chat access:", err);
+        }
+      }
+      setShowLimitMessage(true);
+    } else if (error?.response?.data?.detail) {
+      errorMsg = error.response.data.detail;
+    } else if (error?.response?.data?.error) {
+      errorMsg += `\n${error.response.data.error}`;
     }
 
-    try {
-      const headers = accessToken
-        ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
-        : {};
-
-      const res = await axios.post(
-        "/chat/ask/",
-        {
-          question: inputMessage,
-          ...(sessionId ? { session_id: sessionId } : {}),
-        },
-        { headers }
-      );
-
-      const data = res.data || {};
-      if (!sessionId && data.session_id) {
-        setSessionId(data.session_id);
-      }
-
-      let aiText = "";
-      if (typeof data.summary === "string" && data.summary.trim()) {
-        aiText += data.summary.trim();
-      }
-      if (
-        Array.isArray(data.recommendations) &&
-        data.recommendations.length > 0
-      ) {
-        aiText += (aiText ? "\n\n" : "") + "Recommendations:";
-        data.recommendations.forEach((rec: string) => {
-          aiText += `\n- ${rec}`;
-        });
-      }
-      if (!aiText) {
-        aiText = "Sorry, I could not understand the response.";
-      }
-
-      const aiResponse: Message = {
-        id: messages.length + 2,
-        text: aiText,
-        sender: "ai",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiResponse]);
-    } catch (error: any) {
-      let errorMsg =
-        "Sorry, there was an error getting a response from the assistant.";
-      if (error?.response?.data?.error) {
-        errorMsg += `\n${error.response.data.error}`;
-      }
-      const aiResponse: Message = {
-        id: messages.length + 2,
-        text: errorMsg,
-        sender: "ai",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiResponse]);
-    } finally {
-      setIsTyping(false);
-    }
-  };
+    const aiResponse: Message = {
+      id: messages.length + 2,
+      text: errorMsg,
+      sender: "ai",
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, aiResponse]);
+  } finally {
+    setIsTyping(false);
+  }
+};
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -161,7 +209,10 @@ const ChatAssistant = () => {
 
   // Check if user has reached the message limit
   const accessToken = localStorage.getItem("accessToken");
-  const hasReachedLimit = showLimitMessage && !accessToken;
+  const hasReachedLimit =
+    showLimitMessage ||
+    (!accessToken && messageCount >= MESSAGE_LIMIT) ||
+    (userPlan === "free" && messageCount >= (messagesAllowed || 10));
 
   return (
     <div className="h-screen bg-background flex flex-col">
@@ -219,13 +270,25 @@ const ChatAssistant = () => {
                       : "bg-white shadow-sm border border-gray-200"
                   }`}
                 >
-                  <p
-                    className={`text-sm whitespace-pre-line ${
-                      message.sender === "user" ? "text-white" : "text-gray-800"
-                    }`}
-                  >
-                    {message.text}
-                  </p>
+                  {/* Improved error message styling for AI error responses */}
+                  {message.sender === "ai" &&
+                  message.text.toLowerCase().includes("error") ? (
+                    <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200">
+                      <p className="text-sm text-red-800 whitespace-pre-line">
+                        {message.text}
+                      </p>
+                    </div>
+                  ) : (
+                    <p
+                      className={`text-sm whitespace-pre-line ${
+                        message.sender === "user"
+                          ? "text-white"
+                          : "text-gray-800"
+                      }`}
+                    >
+                      {message.text}
+                    </p>
+                  )}
                   <p
                     className={`text-xs mt-1 ${
                       message.sender === "user"
@@ -271,20 +334,51 @@ const ChatAssistant = () => {
                 <div className="flex items-center">
                   <Lock className="h-5 w-5 text-yellow-500 mr-2" />
                   <h3 className="font-medium text-gray-900">
-                    Message Limit Reached
+                    {!accessToken
+                      ? "Message Limit Reached"
+                      : userPlan === "free"
+                      ? "Monthly Limit Reached"
+                      : "Message Limit Reached"}
                   </h3>
                 </div>
                 <p className="text-sm text-gray-600 mt-2">
-                  You've used your {MESSAGE_LIMIT} free messages this month.
-                  Please sign in to continue using the chat assistant.
+                  {!accessToken
+                    ? "Sign in to continue using the chat assistant."
+                    : userPlan === "free"
+                    ? `You've used all ${messagesAllowed} free messages this month. Upgrade to continue chatting.`
+                    : "You need to be subscribed to continue using the chat assistant."}
                 </p>
-                <div className="mt-4">
-                  <Link
-                    to="/auth"
-                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                  >
-                    Sign In
-                  </Link>
+                <div className="mt-4 flex gap-2">
+                  {!accessToken ? (
+                    <Link
+                      to="/auth"
+                      className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                    >
+                      Sign In
+                    </Link>
+                  ) : userPlan === "free" ? (
+                    <>
+                      <Link
+                        to="/pricing"
+                        className="flex-1 text-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                      >
+                        Upgrade Plan
+                      </Link>
+                      <button
+                        onClick={() => setShowLimitMessage(false)}
+                        className="flex-1 text-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                      >
+                        Dismiss
+                      </button>
+                    </>
+                  ) : (
+                    <Link
+                      to="/pricing"
+                      className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                    >
+                      View Plans
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
@@ -304,7 +398,9 @@ const ChatAssistant = () => {
               onChange={(e) => setInputMessage(e.target.value)}
               placeholder={
                 hasReachedLimit
-                  ? "Sign in to continue chatting..."
+                  ? accessToken
+                    ? "Upgrade your plan to continue chatting..."
+                    : "Sign in to continue chatting..."
                   : "Ask me about your health concerns..."
               }
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50"
@@ -318,6 +414,11 @@ const ChatAssistant = () => {
               <Send className="h-5 w-5" />
             </button>
           </form>
+          {userPlan === "free" && !hasReachedLimit && (
+            <div className="text-xs text-gray-500 mt-1 text-right">
+              Messages used: {messageCount}/{messagesAllowed}
+            </div>
+          )}
           {!hasReachedLimit && (
             <p className="text-xs text-gray-500 mt-2 text-center">
               {!sessionId && (

@@ -1,16 +1,25 @@
 import requests
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.conf import settings
 from .models import ChatLog
 from .models import ChatLog, ChatSession
+from users.models import UserProfile
 import json
 import uuid
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def ask_ai(request):
+    profile = request.user.profile
+    if not profile.can_use_chat_feature():
+        return Response({
+            "error": "message_limit_reached",
+            "detail": f"You've used your {profile.monthly_chat_messages_used} of {10 if profile.plan == 'free' else 'unlimited'} messages this month.",
+            "upgrade_url": "/pricing" if profile.plan == 'free' else None
+        }, status=403)
+    
     question = request.data.get("question", "")
     session_id = request.data.get("session_id")
 
@@ -23,9 +32,9 @@ def ask_ai(request):
             try:
                 session = ChatSession.objects.get(id=session_id)
             except ChatSession.DoesNotExist:
-                session = ChatSession.objects.create(user=request.user if request.user.is_authenticated else None)
+                session = ChatSession.objects.create(user=request.user)
         else:
-            session = ChatSession.objects.create(user=request.user if request.user.is_authenticated else None)
+            session = ChatSession.objects.create(user=request.user)
 
         # Fetch history for context
         history = ChatLog.objects.filter(session=session).order_by("created_at")[:10]
@@ -77,11 +86,16 @@ Only return valid JSON. Do not include explanations or markdown.
         # Log the interaction
         ChatLog.objects.create(
             session=session,
-            user=request.user if request.user.is_authenticated else None,
+            user=request.user,
             question=question,
             response=content
         )
 
+        # Record usage for free users
+        if profile.plan == 'free':
+            profile.record_chat_message()
+            profile.save()
+    
         return Response({
             "session_id": str(session.id),
             **structured
