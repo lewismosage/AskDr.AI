@@ -1,19 +1,19 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/layout/Navbar';
-import Footer from './components/layout/Footer';
-import LandingPage from './pages/home/LandingPage';
-import SymptomChecker from './pages/SymptomChecker';
-import ChatAssistant from './pages/ChatAssistant';
-import MedicationQA from './pages/MedicationQA';
-import Reminders from './pages/Reminders';
-import SubscriptionPlans from './pages/pricing/SubscriptionPlans';
-import AuthPage from './pages/auth/AuthPage';
-import HelpCenter from './pages/HelpCenter';
-import Policies from './pages/policies/Policies';
-import ThankYou from './pages/ThankYou';
-import NotFound from './pages/NotFound';
-import TherapistConnect from './pages/therapistconnect/TherapistConnect';
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Navbar from "./components/layout/Navbar";
+import Footer from "./components/layout/Footer";
+import LandingPage from "./pages/home/LandingPage";
+import SymptomChecker from "./pages/symptomschecker/SymptomChecker";
+import ChatAssistant from "./pages/chatassistant/ChatAssistant";
+import MedicationQA from "./pages/medication_qa/MedicationQA";
+import Reminders from "./pages/Reminders";
+import SubscriptionPlans from "./pages/pricing/SubscriptionPlans";
+import AuthPage from "./pages/auth/AuthPage";
+import HelpCenter from "./pages/help/HelpCenter";
+import Policies from "./pages/policies/Policies";
+import ThankYou from "./pages/ThankYou";
+import NotFound from "./pages/NotFound";
+import TherapistConnect from "./pages/therapistconnect/TherapistConnect";
 
 function App() {
   return (

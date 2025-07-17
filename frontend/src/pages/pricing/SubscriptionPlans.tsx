@@ -1,12 +1,46 @@
-import React from 'react';
-import { Check, Crown, Star } from 'lucide-react';
+import { useState } from 'react';
+import { Check, Crown, Star, ChevronDown } from 'lucide-react';
+
+type BillingCycle = 'monthly' | 'annual';
+
+interface PlanPrice {
+  monthly: string;
+  annual: string;
+}
+
+interface PlanPeriod {
+  monthly: string;
+  annual: string;
+}
+
+interface Plan {
+  name: string;
+  price: PlanPrice;
+  period: PlanPeriod;
+  description: string;
+  features: string[];
+  limitations: string[];
+  buttonText: string;
+  buttonStyle: string;
+  popular: boolean;
+  savings?: string;
+}
 
 const SubscriptionPlans = () => {
-  const plans = [
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
+  const [showComparison, setShowComparison] = useState(false);
+
+  const plans: Plan[] = [
     {
       name: "Free",
-      price: "$0",
-      period: "forever",
+      price: {
+        monthly: "$0",
+        annual: "$0"
+      },
+      period: {
+        monthly: "forever",
+        annual: "forever"
+      },
       description: "Perfect for basic health questions",
       features: [
         "5 symptom checks per month",
@@ -25,8 +59,14 @@ const SubscriptionPlans = () => {
     },
     {
       name: "Plus",
-      price: "$5",
-      period: "/month",
+      price: {
+        monthly: "$5",
+        annual: "$50"
+      },
+      period: {
+        monthly: "/month",
+        annual: "/year"
+      },
       description: "Enhanced features for better health management",
       features: [
         "Unlimited symptom checks",
@@ -38,14 +78,21 @@ const SubscriptionPlans = () => {
         "Priority email support"
       ],
       limitations: [],
-      buttonText: "Start Free Trial",
+      buttonText: "Get Started",
       buttonStyle: "bg-primary text-white hover:bg-primary-dark",
-      popular: true
+      popular: true,
+      savings: "Save 17%"
     },
     {
       name: "Pro",
-      price: "$10",
-      period: "/month",
+      price: {
+        monthly: "$10",
+        annual: "$96"
+      },
+      period: {
+        monthly: "/month",
+        annual: "/year"
+      },
       description: "Complete health companion with premium features",
       features: [
         "Everything in Plus",
@@ -58,9 +105,10 @@ const SubscriptionPlans = () => {
         "Monthly health reports"
       ],
       limitations: [],
-      buttonText: "Start Free Trial",
+      buttonText: "Get Started",
       buttonStyle: "bg-gray-900 text-white hover:bg-gray-800",
-      popular: false
+      popular: false,
+      savings: "Save 20%"
     }
   ];
 
@@ -68,13 +116,31 @@ const SubscriptionPlans = () => {
     <div className="min-h-screen bg-background py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-16">
+        <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             Choose Your Health Plan
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
             Select the perfect plan to support your health journey with AskDr.AI's intelligent features.
           </p>
+          
+          {/* Billing Toggle */}
+          <div className="flex justify-center mb-12">
+            <div className="bg-gray-100 rounded-full p-1 inline-flex">
+              <button
+                onClick={() => setBillingCycle('monthly')}
+                className={`px-6 py-2 rounded-full font-medium transition-colors ${billingCycle === 'monthly' ? 'bg-white shadow-sm text-primary' : 'text-gray-600'}`}
+              >
+                Pay Monthly
+              </button>
+              <button
+                onClick={() => setBillingCycle('annual')}
+                className={`px-6 py-2 rounded-full font-medium transition-colors ${billingCycle === 'annual' ? 'bg-white shadow-sm text-primary' : 'text-gray-600'}`}
+              >
+                Pay Annually
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Plans Grid */}
@@ -82,7 +148,7 @@ const SubscriptionPlans = () => {
           {plans.map((plan, index) => (
             <div
               key={index}
-              className={`relative bg-white rounded-2xl shadow-lg overflow-hidden transform transition-all duration-300 hover:scale-105 ${
+              className={`relative bg-white rounded-2xl shadow-lg overflow-hidden transform transition-all duration-300 hover:scale-[1.02] ${
                 plan.popular ? 'ring-2 ring-primary border-primary' : 'border border-gray-200'
               }`}
             >
@@ -98,9 +164,18 @@ const SubscriptionPlans = () => {
                 <div className="text-center mb-8">
                   <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
                   <div className="flex items-baseline justify-center mb-2">
-                    <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                    <span className="text-gray-600 ml-1">{plan.period}</span>
+                    <span className="text-4xl font-bold text-gray-900">
+                      {plan.price[billingCycle]}
+                    </span>
+                    <span className="text-gray-600 ml-1">
+                      {plan.period[billingCycle]}
+                    </span>
                   </div>
+                  {billingCycle === 'annual' && plan.savings && (
+                    <div className="text-sm text-green-600 font-medium mb-2">
+                      {plan.savings}
+                    </div>
+                  )}
                   <p className="text-gray-600">{plan.description}</p>
                 </div>
 
@@ -120,77 +195,84 @@ const SubscriptionPlans = () => {
                 >
                   {plan.buttonText}
                 </button>
-
-                {plan.name === "Plus" && (
-                  <p className="text-xs text-gray-500 text-center mt-2">
-                    14-day free trial • No credit card required
-                  </p>
-                )}
               </div>
             </div>
           ))}
         </div>
 
-        {/* Features Comparison */}
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
-            Feature Comparison
-          </h2>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-4 px-4 font-semibold text-gray-900">Features</th>
-                  <th className="text-center py-4 px-4 font-semibold text-gray-900">Free</th>
-                  <th className="text-center py-4 px-4 font-semibold text-gray-900">
-                    Plus
-                    <Crown className="h-4 w-4 text-primary inline ml-1" />
-                  </th>
-                  <th className="text-center py-4 px-4 font-semibold text-gray-900">Pro</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <tr>
-                  <td className="py-4 px-4 text-gray-700">Monthly symptom checks</td>
-                  <td className="py-4 px-4 text-center">5</td>
-                  <td className="py-4 px-4 text-center text-green-600">Unlimited</td>
-                  <td className="py-4 px-4 text-center text-green-600">Unlimited</td>
-                </tr>
-                <tr className="bg-gray-50">
-                  <td className="py-4 px-4 text-gray-700">AI chat support</td>
-                  <td className="py-4 px-4 text-center">Basic</td>
-                  <td className="py-4 px-4 text-center text-green-600">Advanced</td>
-                  <td className="py-4 px-4 text-center text-green-600">Premium</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-gray-700">Medication reminders</td>
-                  <td className="py-4 px-4 text-center text-gray-400">✗</td>
-                  <td className="py-4 px-4 text-center text-green-600">✓</td>
-                  <td className="py-4 px-4 text-center text-green-600">✓</td>
-                </tr>
-                <tr className="bg-gray-50">
-                  <td className="py-4 px-4 text-gray-700">Health goal tracking</td>
-                  <td className="py-4 px-4 text-center text-gray-400">✗</td>
-                  <td className="py-4 px-4 text-center text-green-600">✓</td>
-                  <td className="py-4 px-4 text-center text-green-600">✓</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-gray-700">Family profiles</td>
-                  <td className="py-4 px-4 text-center text-gray-400">✗</td>
-                  <td className="py-4 px-4 text-center text-gray-400">✗</td>
-                  <td className="py-4 px-4 text-center text-green-600">✓</td>
-                </tr>
-                <tr className="bg-gray-50">
-                  <td className="py-4 px-4 text-gray-700">24/7 support</td>
-                  <td className="py-4 px-4 text-center text-gray-400">✗</td>
-                  <td className="py-4 px-4 text-center text-gray-400">✗</td>
-                  <td className="py-4 px-4 text-center text-green-600">✓</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        {/* Comparison Toggle */}
+        <div className="text-center mb-8">
+          <button
+            onClick={() => setShowComparison(!showComparison)}
+            className="inline-flex items-center text-primary font-medium"
+          >
+            {showComparison ? 'Hide' : 'Show'} full feature comparison
+            <ChevronDown className={`h-5 w-5 ml-2 transition-transform ${showComparison ? 'rotate-180' : ''}`} />
+          </button>
         </div>
+
+        {/* Features Comparison */}
+        {showComparison && (
+          <div className="bg-white rounded-2xl shadow-lg p-8 mb-16">
+            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
+              Feature Comparison
+            </h2>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-4 px-4 font-semibold text-gray-900">Features</th>
+                    <th className="text-center py-4 px-4 font-semibold text-gray-900">Free</th>
+                    <th className="text-center py-4 px-4 font-semibold text-gray-900">
+                      Plus
+                      <Crown className="h-4 w-4 text-primary inline ml-1" />
+                    </th>
+                    <th className="text-center py-4 px-4 font-semibold text-gray-900">Pro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  <tr>
+                    <td className="py-4 px-4 text-gray-700">Monthly symptom checks</td>
+                    <td className="py-4 px-4 text-center">5</td>
+                    <td className="py-4 px-4 text-center text-green-600">Unlimited</td>
+                    <td className="py-4 px-4 text-center text-green-600">Unlimited</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="py-4 px-4 text-gray-700">AI chat support</td>
+                    <td className="py-4 px-4 text-center">Basic</td>
+                    <td className="py-4 px-4 text-center text-green-600">Advanced</td>
+                    <td className="py-4 px-4 text-center text-green-600">Premium</td>
+                  </tr>
+                  <tr>
+                    <td className="py-4 px-4 text-gray-700">Medication reminders</td>
+                    <td className="py-4 px-4 text-center text-gray-400">✗</td>
+                    <td className="py-4 px-4 text-center text-green-600">✓</td>
+                    <td className="py-4 px-4 text-center text-green-600">✓</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="py-4 px-4 text-gray-700">Health goal tracking</td>
+                    <td className="py-4 px-4 text-center text-gray-400">✗</td>
+                    <td className="py-4 px-4 text-center text-green-600">✓</td>
+                    <td className="py-4 px-4 text-center text-green-600">✓</td>
+                  </tr>
+                  <tr>
+                    <td className="py-4 px-4 text-gray-700">Family profiles</td>
+                    <td className="py-4 px-4 text-center text-gray-400">✗</td>
+                    <td className="py-4 px-4 text-center text-gray-400">✗</td>
+                    <td className="py-4 px-4 text-center text-green-600">✓</td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="py-4 px-4 text-gray-700">24/7 support</td>
+                    <td className="py-4 px-4 text-center text-gray-400">✗</td>
+                    <td className="py-4 px-4 text-center text-gray-400">✗</td>
+                    <td className="py-4 px-4 text-center text-green-600">✓</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* FAQ */}
         <div className="mt-16 text-center">
@@ -207,8 +289,8 @@ const SubscriptionPlans = () => {
               <p className="text-gray-600">Absolutely. We use enterprise-grade encryption and comply with healthcare privacy regulations.</p>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">How does the free trial work?</h3>
-              <p className="text-gray-600">Start with a 14-day free trial of Plus or Pro. No credit card required to begin.</p>
+              <h3 className="font-semibold text-gray-900 mb-2">Can I switch between monthly and annual billing?</h3>
+              <p className="text-gray-600">Yes, you can change your billing cycle at any time. Changes will take effect at your next renewal date.</p>
             </div>
             <div>
               <h3 className="font-semibold text-gray-900 mb-2">Can I upgrade or downgrade?</h3>

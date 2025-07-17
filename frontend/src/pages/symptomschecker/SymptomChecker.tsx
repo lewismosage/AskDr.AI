@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Search, AlertTriangle, Clock, Thermometer } from 'lucide-react';
-import { fetchNearbyClinics } from '../lip/apiHelpers';
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  ArrowLeft,
+  Search,
+  AlertTriangle,
+  Clock,
+  Thermometer,
+} from "lucide-react";
+import { fetchNearbyClinics } from "../../lip/apiHelpers";
 
 const SymptomChecker = () => {
-  const [symptoms, setSymptoms] = useState('');
+  const [symptoms, setSymptoms] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
-  const [note, setNote] = useState<string>('');
+  const [note, setNote] = useState<string>("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -15,15 +21,17 @@ const SymptomChecker = () => {
 
     setIsLoading(true);
     setResults([]);
-    setNote('');
+    setNote("");
     try {
-      const res = await import('../lip/api').then(m => m.default.post('/symptoms/check/', { symptoms }));
+      const res = await import("../../lip/api").then((m) =>
+        m.default.post("/symptoms/check/", { symptoms })
+      );
       const data = res.data || {};
       setResults(data.conditions || []);
-      setNote(data.note || '');
+      setNote(data.note || "");
     } catch (error: any) {
       setResults([]);
-      setNote('Sorry, there was an error analyzing your symptoms.');
+      setNote("Sorry, there was an error analyzing your symptoms.");
     } finally {
       setIsLoading(false);
     }
@@ -34,11 +42,9 @@ const SymptomChecker = () => {
   const [clinicError, setClinicError] = useState<string | null>(null);
   const [isClinicLoading, setIsClinicLoading] = useState(false);
 
-
-
   const handleFindDoctor = () => {
     if (!navigator.geolocation) {
-      setClinicError('Geolocation is not supported by your browser.');
+      setClinicError("Geolocation is not supported by your browser.");
       return;
     }
     setIsClinicLoading(true);
@@ -51,13 +57,17 @@ const SymptomChecker = () => {
           const res = await fetchNearbyClinics(latitude, longitude);
           setClinics(res.data.clinics || []);
         } catch (error) {
-          setClinicError('Could not fetch nearby clinics. Please try again later.');
+          setClinicError(
+            "Could not fetch nearby clinics. Please try again later."
+          );
         } finally {
           setIsClinicLoading(false);
         }
       },
       () => {
-        setClinicError('Unable to retrieve your location. Please allow location access.');
+        setClinicError(
+          "Unable to retrieve your location. Please allow location access."
+        );
         setIsClinicLoading(false);
       }
     );
@@ -75,9 +85,12 @@ const SymptomChecker = () => {
             <ArrowLeft className="h-5 w-5 mr-2" />
             Back to Home
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Symptom Checker</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            AI Symptom Checker
+          </h1>
           <p className="text-gray-600">
-            Describe your symptoms and get AI-powered insights into possible conditions.
+            Describe your symptoms and get AI-powered insights into possible
+            conditions.
           </p>
         </div>
 
@@ -86,10 +99,14 @@ const SymptomChecker = () => {
           <div className="flex items-start">
             <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
             <div>
-              <h3 className="text-sm font-semibold text-yellow-800 mb-1">Medical Disclaimer</h3>
+              <h3 className="text-sm font-semibold text-yellow-800 mb-1">
+                Medical Disclaimer
+              </h3>
               <p className="text-sm text-yellow-700">
-                This tool is for informational purposes only and is not a substitute for professional medical advice, 
-                diagnosis, or treatment. Always consult with a healthcare provider for medical concerns.
+                This tool is for informational purposes only and is not a
+                substitute for professional medical advice, diagnosis, or
+                treatment. Always consult with a healthcare provider for medical
+                concerns.
               </p>
             </div>
           </div>
@@ -99,7 +116,10 @@ const SymptomChecker = () => {
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label htmlFor="symptoms" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="symptoms"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Describe your symptoms
               </label>
               <textarea
@@ -135,10 +155,17 @@ const SymptomChecker = () => {
         {/* Results */}
         {(results.length > 0 || note) && (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Possible Conditions</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              Possible Conditions
+            </h2>
             {results.map((result, index) => (
-              <div key={index} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{result.name}</h3>
+              <div
+                key={index}
+                className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-300"
+              >
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  {result.name}
+                </h3>
                 <div className="flex items-center space-x-4 mb-3">
                   {result.probability && (
                     <span className="text-sm text-gray-600">
@@ -146,15 +173,17 @@ const SymptomChecker = () => {
                     </span>
                   )}
                   {result.severity && (
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      result.severity.toLowerCase() === 'mild'
-                        ? 'text-green-600 bg-green-100'
-                        : result.severity.toLowerCase() === 'moderate'
-                        ? 'text-yellow-600 bg-yellow-100'
-                        : result.severity.toLowerCase() === 'severe'
-                        ? 'text-red-600 bg-red-100'
-                        : 'text-gray-600 bg-gray-100'
-                    }`}>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        result.severity.toLowerCase() === "mild"
+                          ? "text-green-600 bg-green-100"
+                          : result.severity.toLowerCase() === "moderate"
+                          ? "text-yellow-600 bg-yellow-100"
+                          : result.severity.toLowerCase() === "severe"
+                          ? "text-red-600 bg-red-100"
+                          : "text-gray-600 bg-gray-100"
+                      }`}
+                    >
                       {result.severity}
                     </span>
                   )}
@@ -165,9 +194,12 @@ const SymptomChecker = () => {
             {(note || true) && (
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-6 text-center">
                 {note && <p className="text-gray-700 mb-4">{note}</p>}
-                <h3 className="font-semibold text-gray-900 mb-2">Need More Help?</h3>
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Need More Help?
+                </h3>
                 <p className="text-gray-600 mb-4">
-                  For a more detailed consultation, try our AI assistant or consult with a healthcare professional.
+                  For a more detailed consultation, try our AI assistant or
+                  consult with a healthcare professional.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Link
@@ -180,7 +212,7 @@ const SymptomChecker = () => {
                     onClick={handleFindDoctor}
                     className="border border-primary text-primary px-6 py-2 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors duration-200"
                   >
-                    {isClinicLoading ? 'Searching...' : 'Find a Doctor'}
+                    {isClinicLoading ? "Searching..." : "Find a Doctor"}
                   </button>
                 </div>
               </div>
@@ -191,13 +223,21 @@ const SymptomChecker = () => {
         {/* Clinics Results and Error */}
         {clinics.length > 0 && (
           <div className="mt-8">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Clinics Near You</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Clinics Near You
+            </h3>
             <ul className="space-y-4">
               {clinics.map((clinic, idx) => (
                 <li key={idx} className="bg-white p-4 rounded-lg shadow-md">
-                  <h4 className="text-lg font-semibold text-gray-800">{clinic.name}</h4>
+                  <h4 className="text-lg font-semibold text-gray-800">
+                    {clinic.name}
+                  </h4>
                   <p className="text-gray-600">{clinic.address}</p>
-                  {clinic.rating && <p className="text-sm text-gray-500">Rating: {clinic.rating}</p>}
+                  {clinic.rating && (
+                    <p className="text-sm text-gray-500">
+                      Rating: {clinic.rating}
+                    </p>
+                  )}
                   <p className="text-sm text-gray-500">
                     Lat: {clinic.location?.lat}, Lng: {clinic.location?.lng}
                   </p>

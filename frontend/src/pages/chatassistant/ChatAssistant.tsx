@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User } from 'lucide-react';
-import axios from '../lip/api';
+import axios from '../../lip/api';
 
 interface Message {
   id: number;
