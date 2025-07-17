@@ -8,6 +8,7 @@ import {
 } from "@stripe/react-stripe-js";
 import { useState } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
+import api from "../../lip/api";
 import axios from "axios";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY!);
@@ -41,7 +42,7 @@ const PaymentForm = ({ plan, onBack, onSuccess }: StripePaymentProps) => {
 
     try {
       // Create subscription on backend
-      const response = await axios.post('/api/billing/create-subscription/', {
+      const response = await api.post('/billing/create-subscription/', {
         plan: plan.name.toLowerCase(),
         billing_cycle: plan.billingCycle
       });

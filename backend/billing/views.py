@@ -21,12 +21,12 @@ def create_subscription(request):
     
     price_ids = {
         "plus": {
-            "monthly": "prod_SfkOPKWrFCLAn2",
-            "annual": "prod_SfkKm5o7aVrKZe"
+            "monthly": "price_1RlsXnCWhrsZxJu1gHVAf5CZ",
+            "annual": "price_1RlsXnCWhrsZxJu1gHVAf5CZ"
         },
         "pro": {
-            "monthly": "prod_SfkKOjkRxYakbL",
-            "annual": "prod_ShFg6sL8eQNfqZ"
+            "monthly": "price_1RlsXnCWhrsZxJu1gHVAf5CZ",
+            "annual": "price_1RlsXnCWhrsZxJu1gHVAf5CZ"
         }
     }
     
@@ -85,53 +85,62 @@ def stripe_webhook(request):
     except stripe.error.SignatureVerificationError as e:
         return HttpResponse(status=400)
 
-    # Handle subscription events
-    if event['type'] == 'customer.subscription.created':
-        subscription = event['data']['object']
-        user_id = subscription['metadata']['user_id']
-        plan = subscription['metadata']['plan']
-        
-        try:
-            profile = UserProfile.objects.get(user__id=user_id)
-            profile.plan = plan
-            profile.stripe_subscription_id = subscription.id
-            profile.save()
-        except UserProfile.DoesNotExist:
-            pass
+    try:
+        # Handle subscription events
+        if event['type'] == 'customer.subscription.created':
+            subscription = event['data']['object']
+            metadata = subscription.get('metadata', {})
+            user_id = metadata.get('user_id')
+            plan = metadata.get('plan')
+            
+            if user_id and plan:
+                try:
+                    profile = UserProfile.objects.get(user__id=user_id)
+                    profile.plan = plan
+                    profile.stripe_subscription_id = subscription.id
+                    profile.save()
+                except UserProfile.DoesNotExist:
+                    pass
 
-    elif event['type'] == 'customer.subscription.updated':
-        subscription = event['data']['object']
-        try:
-            profile = UserProfile.objects.get(stripe_subscription_id=subscription.id)
-            if subscription['status'] in ['active', 'trialing']:
-                profile.plan = subscription['metadata'].get('plan', 'free')
-            else:
+        elif event['type'] == 'customer.subscription.updated':
+            subscription = event['data']['object']
+            try:
+                profile = UserProfile.objects.get(stripe_subscription_id=subscription.id)
+                metadata = subscription.get('metadata', {})
+                if subscription['status'] in ['active', 'trialing']:
+                    profile.plan = metadata.get('plan', 'free')
+                else:
+                    profile.plan = 'free'
+                profile.save()
+            except UserProfile.DoesNotExist:
+                pass
+
+        elif event['type'] == 'invoice.payment_succeeded':
+            invoice = event['data']['object']
+            subscription_id = invoice.get('subscription')
+            if subscription_id:
+                try:
+                    profile = UserProfile.objects.get(stripe_subscription_id=subscription_id)
+                    profile.save()  # Update any necessary fields
+                except UserProfile.DoesNotExist:
+                    pass
+
+        elif event['type'] == 'customer.subscription.deleted':
+            subscription = event['data']['object']
+            try:
+                profile = UserProfile.objects.get(stripe_subscription_id=subscription.id)
                 profile.plan = 'free'
-            profile.save()
-        except UserProfile.DoesNotExist:
-            pass
+                profile.stripe_subscription_id = None
+                profile.save()
+            except UserProfile.DoesNotExist:
+                pass
 
-    elif event['type'] == 'invoice.payment_succeeded':
-        # Handle successful recurring payment
-        invoice = event['data']['object']
-        subscription_id = invoice['subscription']
-        try:
-            profile = UserProfile.objects.get(stripe_subscription_id=subscription_id)
-            # Update any necessary fields
-            profile.save()
-        except UserProfile.DoesNotExist:
-            pass
-
-    elif event['type'] == 'customer.subscription.deleted':
-        # Handle subscription cancellation
-        subscription = event['data']['object']
-        try:
-            profile = UserProfile.objects.get(stripe_subscription_id=subscription.id)
-            profile.plan = 'free'
-            profile.stripe_subscription_id = None
-            profile.save()
-        except UserProfile.DoesNotExist:
-            pass
+    except Exception as e:
+        # Log the error but still return 200 to Stripe
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Webhook error: {str(e)}", exc_info=True)
+        return HttpResponse(status=200)
 
     return HttpResponse(status=200)
 
