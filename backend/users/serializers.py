@@ -6,10 +6,11 @@ from django.contrib.auth import authenticate
 
 class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
+    plan = serializers.CharField(source='profile.plan', read_only=True)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'full_name')
+        fields = ('id', 'username', 'email', 'full_name', 'plan')
 
     def get_full_name(self, obj):
         return obj.first_name

@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'reminders',
     'clinics',
     'mentalhealth',
+    'stripe',
 ]
 
 
@@ -170,3 +171,8 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
 
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
