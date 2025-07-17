@@ -24,7 +24,14 @@ function App() {
         <main className="flex-1">
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/symptom-checker" element={<SymptomChecker />} />
+            <Route 
+              path="/symptom-checker" 
+              element={
+                <RequireAuth>
+                  <SymptomChecker />
+                </RequireAuth>
+              } 
+            />
             <Route 
               path="/chat" 
               element={
@@ -33,8 +40,22 @@ function App() {
                 </RequireAuth>
               } 
             />
-            <Route path="/medication-qa" element={<MedicationQA />} />
-            <Route path="/therapist-connect" element={<TherapistConnect />} />
+            <Route 
+              path="/therapist-connect" 
+              element={
+                <RequireAuth>
+                  <TherapistConnect />
+                </RequireAuth>
+              } 
+            />
+            <Route 
+              path="/medication-qa" 
+              element={
+                <RequireAuth>
+                  <MedicationQA />
+                </RequireAuth>
+              } 
+            />
             <Route path="/reminders" element={<Reminders />} />
             <Route path="/plans" element={<SubscriptionPlans />} />
             <Route path="/help-center" element={<HelpCenter />} />

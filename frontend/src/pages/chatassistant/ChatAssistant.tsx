@@ -12,7 +12,7 @@ interface Message {
 }
 
 // Constants
-const MESSAGE_LIMIT = 2;
+const MESSAGE_LIMIT = 5;
 const STORAGE_KEY = "chatMessageCount";
 
 const ChatAssistant = () => {

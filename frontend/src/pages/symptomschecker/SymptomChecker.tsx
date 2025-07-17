@@ -1,30 +1,87 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   Search,
   AlertTriangle,
   Clock,
   Thermometer,
+  Lock,
 } from "lucide-react";
 import { fetchNearbyClinics } from "../../lip/apiHelpers";
+import axios from "../../lip/api";
+
+// Constants
+const SYMPTOM_CHECK_LIMIT = 2;
+const STORAGE_KEY = "symptomCheckCount";
 
 const SymptomChecker = () => {
   const [symptoms, setSymptoms] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [note, setNote] = useState<string>("");
+  const [checkCount, setCheckCount] = useState(0);
+  const [showLimitMessage, setShowLimitMessage] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Initialize check count from localStorage
+  useEffect(() => {
+    const storedCount = localStorage.getItem(STORAGE_KEY);
+    const count = storedCount ? parseInt(storedCount) : 0;
+    setCheckCount(count);
+
+    if (count >= SYMPTOM_CHECK_LIMIT) {
+      setShowLimitMessage(true);
+    }
+  }, []);
+
+  // Check authentication status
+  useEffect(() => {
+    const accessToken = localStorage.getItem("accessToken");
+    if (accessToken) {
+      // Clear the check limit for authenticated users
+      localStorage.removeItem(STORAGE_KEY);
+      setCheckCount(0);
+      setShowLimitMessage(false);
+    }
+  }, []);
+
+  const incrementCheckCount = () => {
+    const newCount = checkCount + 1;
+    setCheckCount(newCount);
+    localStorage.setItem(STORAGE_KEY, newCount.toString());
+
+    if (newCount >= SYMPTOM_CHECK_LIMIT) {
+      setShowLimitMessage(true);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!symptoms.trim()) return;
+    const accessToken = localStorage.getItem("accessToken");
+
+    if (!symptoms.trim() || (showLimitMessage && !accessToken)) return;
 
     setIsLoading(true);
     setResults([]);
     setNote("");
+
+    if (!accessToken) {
+      incrementCheckCount();
+    }
+
     try {
-      const res = await import("../../lip/api").then((m) =>
-        m.default.post("/symptoms/check/", { symptoms })
+      const headers = accessToken
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : {};
+
+      const res = await axios.post(
+        "/symptoms/check/",
+        { symptoms },
+        { headers }
       );
       const data = res.data || {};
       setResults(data.conditions || []);
@@ -73,6 +130,10 @@ const SymptomChecker = () => {
     );
   };
 
+  // Check if user has reached the limit
+  const accessToken = localStorage.getItem("accessToken");
+  const hasReachedLimit = showLimitMessage && !accessToken;
+
   return (
     <div className="min-h-screen bg-background py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -114,6 +175,34 @@ const SymptomChecker = () => {
 
         {/* Symptom Input Form */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          {hasReachedLimit && (
+            <div className="mb-6 bg-white border border-yellow-200 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center">
+                <Lock className="h-5 w-5 text-yellow-500 mr-2" />
+                <h3 className="font-medium text-gray-900">Limit Reached</h3>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                You've used your {SYMPTOM_CHECK_LIMIT} free symptom checks this
+                month. Please sign in to continue using this feature.
+              </p>
+              <div className="mt-4 flex flex-col space-y-2">
+                <button
+                  onClick={() =>
+                    navigate(
+                      `/auth?from=${encodeURIComponent(location.pathname)}`
+                    )
+                  }
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                >
+                  Sign In to Continue
+                </button>
+                <p className="text-xs text-gray-500 text-center">
+                  Already signed in? Refresh the page
+                </p>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label
@@ -127,14 +216,19 @@ const SymptomChecker = () => {
                 rows={4}
                 value={symptoms}
                 onChange={(e) => setSymptoms(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none"
-                placeholder="Describe your symptoms here... (e.g., I have been experiencing a runny nose, sneezing, and mild headache for the past 2 days)"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none disabled:opacity-50"
+                placeholder={
+                  hasReachedLimit
+                    ? "Sign in to continue using symptom checker..."
+                    : "Describe your symptoms here... (e.g., I have been experiencing a runny nose, sneezing, and mild headache for the past 2 days)"
+                }
                 required
+                disabled={hasReachedLimit}
               />
             </div>
             <button
               type="submit"
-              disabled={isLoading || !symptoms.trim()}
+              disabled={isLoading || !symptoms.trim() || hasReachedLimit}
               className="w-full bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary-dark transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isLoading ? (
@@ -150,6 +244,13 @@ const SymptomChecker = () => {
               )}
             </button>
           </form>
+
+          {!hasReachedLimit && !accessToken && (
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              Free symptom checks remaining: {SYMPTOM_CHECK_LIMIT - checkCount}{" "}
+              of {SYMPTOM_CHECK_LIMIT}
+            </p>
+          )}
         </div>
 
         {/* Results */}

@@ -1,20 +1,74 @@
-import React, { useState } from "react";
-import { Search, Pill, AlertTriangle, Info, Clock } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, Pill, AlertTriangle, Info, Clock, Lock } from "lucide-react";
 import api from "../../lip/api";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+
+// Constants
+const MEDICATION_QA_LIMIT = 5;
+const STORAGE_KEY = "medicationQACount";
 
 const MedicationQA = () => {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [qaCount, setQACount] = useState(0);
+  const [showLimitMessage, setShowLimitMessage] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Initialize QA count from localStorage
+  useEffect(() => {
+    const storedCount = localStorage.getItem(STORAGE_KEY);
+    const count = storedCount ? parseInt(storedCount) : 0;
+    setQACount(count);
+
+    if (count >= MEDICATION_QA_LIMIT) {
+      setShowLimitMessage(true);
+    }
+  }, []);
+
+  // Check authentication status
+  useEffect(() => {
+    const accessToken = localStorage.getItem("accessToken");
+    if (accessToken) {
+      // Clear the QA limit for authenticated users
+      localStorage.removeItem(STORAGE_KEY);
+      setQACount(0);
+      setShowLimitMessage(false);
+    }
+  }, []);
+
+  const incrementQACount = () => {
+    const newCount = qaCount + 1;
+    setQACount(newCount);
+    localStorage.setItem(STORAGE_KEY, newCount.toString());
+
+    if (newCount >= MEDICATION_QA_LIMIT) {
+      setShowLimitMessage(true);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim()) return;
+    const accessToken = localStorage.getItem("accessToken");
+
+    if (!question.trim() || (showLimitMessage && !accessToken)) return;
 
     setIsLoading(true);
-    setResponse("");
+    setResponse(null);
+
+    if (!accessToken) {
+      incrementQACount();
+    }
+
     try {
-      const res = await api.post("medications/ask/", { question });
+      const headers = accessToken
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : {};
+
+      const res = await api.post("medications/ask/", { question }, { headers });
       setResponse(res.data);
     } catch (err: any) {
       setResponse(
@@ -25,6 +79,10 @@ const MedicationQA = () => {
       setIsLoading(false);
     }
   };
+
+  // Check if user has reached the limit
+  const accessToken = localStorage.getItem("accessToken");
+  const hasReachedLimit = showLimitMessage && !accessToken;
 
   const safetyTips = [
     {
@@ -88,6 +146,34 @@ const MedicationQA = () => {
 
         {/* Question Form */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          {hasReachedLimit && (
+            <div className="mb-6 bg-white border border-yellow-200 rounded-lg p-4 shadow-sm">
+              <div className="flex items-center">
+                <Lock className="h-5 w-5 text-yellow-500 mr-2" />
+                <h3 className="font-medium text-gray-900">Limit Reached</h3>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">
+                You've used your {MEDICATION_QA_LIMIT} free medication questions
+                this month. Please sign in to continue using this feature.
+              </p>
+              <div className="mt-4 flex flex-col space-y-2">
+                <button
+                  onClick={() =>
+                    navigate(
+                      `/auth?from=${encodeURIComponent(location.pathname)}`
+                    )
+                  }
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                >
+                  Sign In to Continue
+                </button>
+                <p className="text-xs text-gray-500 text-center">
+                  Already signed in? Refresh the page
+                </p>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label
@@ -101,14 +187,19 @@ const MedicationQA = () => {
                 rows={3}
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none"
-                placeholder="Ask about your medications... (e.g., Can I take ibuprofen with acetaminophen? What are the side effects of...?)"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none disabled:opacity-50"
+                placeholder={
+                  hasReachedLimit
+                    ? "Sign in to continue asking about medications..."
+                    : "Ask about your medications... (e.g., Can I take ibuprofen with acetaminophen? What are the side effects of...?)"
+                }
                 required
+                disabled={hasReachedLimit}
               />
             </div>
             <button
               type="submit"
-              disabled={isLoading || !question.trim()}
+              disabled={isLoading || !question.trim() || hasReachedLimit}
               className="w-full bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary-dark transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isLoading ? (
@@ -124,6 +215,13 @@ const MedicationQA = () => {
               )}
             </button>
           </form>
+
+          {!hasReachedLimit && !accessToken && (
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              Free medication questions remaining:{" "}
+              {MEDICATION_QA_LIMIT - qaCount} of {MEDICATION_QA_LIMIT}
+            </p>
+          )}
         </div>
 
         {/* Response */}
