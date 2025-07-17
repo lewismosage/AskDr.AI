@@ -15,5 +15,4 @@ urlpatterns = [
     path('api/reminders/', include('reminders.urls')),
     path('api/clinics/', include('clinics.urls')),
     path('api/mentalhealth/', include('mentalhealth.urls')),
-    path('notifications/', include('notifications.urls')),
 ]

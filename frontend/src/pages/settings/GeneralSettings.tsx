@@ -73,7 +73,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       </div>
 
       {/* Language & Region Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="space-y-6">
         <div>
           <h2 className="text-xl font-semibold mb-4 flex items-center">
             <Globe className="h-5 w-5 mr-2" />

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Settings, Bell, Link, User } from 'lucide-react';
 import GeneralSettings from './GeneralSettings';
-import NotificationSettings from './NotificationSettings';
 import ConnectedAppsSettings from './ConnectedAppsSettings';
 import AccountSettings from './AccountSettings';
 
@@ -13,7 +12,6 @@ interface SettingsItem {
 
 const settingsCategories: SettingsItem[] = [
   { id: 'general', title: 'General', icon: <Settings size={18} /> },
-  { id: 'notifications', title: 'Notifications', icon: <Bell size={18} /> },
   { id: 'connected-apps', title: 'Connected apps', icon: <Link size={18} /> },
   { id: 'account', title: 'Account', icon: <User size={18} /> },
 ];
@@ -99,8 +97,6 @@ const SettingsPage: React.FC = () => {
             timezones={timezones}
           />
         );
-      case 'notifications':
-        return <NotificationSettings />;
       case 'connected-apps':
         return (
           <ConnectedAppsSettings
