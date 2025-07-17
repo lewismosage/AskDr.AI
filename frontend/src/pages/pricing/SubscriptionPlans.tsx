@@ -136,7 +136,7 @@ const SubscriptionPlans = () => {
       return;
     }
 
-    // Proceed to payment for authenticated users
+    // Immediately proceed to Stripe Checkout for authenticated users
     setSelectedPlan({
       name: plan.name,
       price: plan.price[billingCycle],

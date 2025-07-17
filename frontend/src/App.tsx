@@ -57,7 +57,7 @@ function App() {
               } 
             />
             <Route path="/reminders" element={<Reminders />} />
-            <Route path="/plans" element={<SubscriptionPlans />} />
+            <Route path="/pricing" element={<SubscriptionPlans />} />
             <Route path="/help-center" element={<HelpCenter />} />
             <Route path="/terms" element={<Policies />} />
             <Route path="/auth" element={<AuthPage />} />

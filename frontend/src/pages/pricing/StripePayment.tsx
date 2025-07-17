@@ -1,12 +1,7 @@
 // StripePayment.tsx
 import { loadStripe } from "@stripe/stripe-js";
-import {
-  Elements,
-  CardElement,
-  useStripe,
-  useElements,
-} from "@stripe/react-stripe-js";
-import { useState } from "react";
+import { Elements, useStripe } from "@stripe/react-stripe-js";
+import { useState, useEffect } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
 import api from "../../lip/api";
 import axios from "axios";
@@ -25,122 +20,74 @@ interface StripePaymentProps {
 
 const PaymentForm = ({ plan, onBack, onSuccess }: StripePaymentProps) => {
   const stripe = useStripe();
-  const elements = useElements();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  // Immediately trigger the Stripe Checkout when component mounts
+  useEffect(() => {
+    const initiateCheckout = async () => {
+      if (!stripe) return;
 
-    if (!stripe || !elements) {
-      return;
-    }
+      setLoading(true);
+      setError(null);
 
-    setLoading(true);
-    setError(null);
+      try {
+        // Create subscription on backend
+        const response = await api.post("/billing/create-subscription/", {
+          plan: plan.name.toLowerCase(),
+          billing_cycle: plan.billingCycle,
+        });
 
-    try {
-      // Create subscription on backend
-      const response = await api.post('/billing/create-subscription/', {
-        plan: plan.name.toLowerCase(),
-        billing_cycle: plan.billingCycle
-      });
+        const { sessionId } = response.data;
 
-      const { sessionId } = response.data;
+        // Redirect to Stripe Checkout
+        const { error: stripeError } = await stripe.redirectToCheckout({
+          sessionId,
+        });
 
-      // Redirect to Stripe Checkout
-      const { error: stripeError } = await stripe.redirectToCheckout({
-        sessionId
-      });
-
-      if (stripeError) {
-        setError(stripeError.message || "Payment failed");
+        if (stripeError) {
+          setError(stripeError.message || "Payment failed");
+          setLoading(false);
+        }
+      } catch (err) {
+        setLoading(false);
+        if (axios.isAxiosError(err)) {
+          setError(err.response?.data?.error || "An unexpected error occurred");
+        } else {
+          setError("An unexpected error occurred");
+        }
       }
-    } catch (err) {
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.error || "An unexpected error occurred");
-      } else {
-        setError("An unexpected error occurred");
-      }
-    }    
-  };
+    };
 
-  if (success) {
+    initiateCheckout();
+  }, [stripe, plan.name, plan.billingCycle]);
+
+  if (error) {
     return (
       <div className="text-center p-8">
-        <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-        <h3 className="text-2xl font-bold text-gray-900 mb-2">
-          Payment Successful!
-        </h3>
-        <p className="text-gray-600 mb-6">
-          You've successfully subscribed to {plan.name} ({plan.billingCycle}).
-        </p>
+        <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-2xl font-bold text-gray-900 mb-2">Payment Error</h3>
+        <p className="text-gray-600 mb-6">{error}</p>
         <button
-          onClick={onSuccess}
+          onClick={onBack}
           className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-dark transition-colors"
         >
-          Continue to Dashboard
+          Back to Plans
         </button>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md mx-auto">
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">
-        Complete Your Subscription
-      </h2>
+    <div className="text-center p-8">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+      <h3 className="text-2xl font-bold text-gray-900 mb-2">
+        Redirecting to Secure Checkout...
+      </h3>
       <p className="text-gray-600 mb-6">
-        You're subscribing to <span className="font-semibold">{plan.name}</span>{" "}
-        plan at <span className="font-semibold">{plan.price}</span> per{" "}
-        {plan.billingCycle === "monthly" ? "month" : "year"}.
+        Please wait while we prepare your payment details.
       </p>
-
-      <form onSubmit={handleSubmit}>
-        <div className="mb-6">
-          <CardElement
-            options={{
-              style: {
-                base: {
-                  fontSize: "16px",
-                  color: "#424770",
-                  "::placeholder": {
-                    color: "#aab7c4",
-                  },
-                },
-                invalid: {
-                  color: "#9e2146",
-                },
-              },
-            }}
-          />
-        </div>
-
-        {error && (
-          <div className="flex items-center text-red-500 mb-4">
-            <XCircle className="h-5 w-5 mr-2" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <div className="flex justify-between">
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Back to Plans
-          </button>
-          <button
-            type="submit"
-            disabled={!stripe || loading}
-            className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Processing..." : `Subscribe for ${plan.price}`}
-          </button>
-        </div>
-      </form>
     </div>
   );
 };
