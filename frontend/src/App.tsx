@@ -11,6 +11,7 @@ import SubscriptionPlans from "./pages/pricing/SubscriptionPlans";
 import AuthPage from "./pages/auth/AuthPage";
 import HelpCenter from "./pages/help/HelpCenter";
 import Policies from "./pages/policies/Policies";
+import UserPlanStatus from "./pages/pricing/UserPlanStatus"
 import ThankYou from "./pages/ThankYou";
 import NotFound from "./pages/NotFound";
 import TherapistConnect from "./pages/therapistconnect/TherapistConnect";
@@ -57,6 +58,7 @@ function App() {
               } 
             />
             <Route path="/reminders" element={<Reminders />} />
+            <Route path="/plan" element={<UserPlanStatus />} />
             <Route path="/pricing" element={<SubscriptionPlans />} />
             <Route path="/help-center" element={<HelpCenter />} />
             <Route path="/terms" element={<Policies />} />

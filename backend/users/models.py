@@ -119,3 +119,7 @@ class UserProfile(models.Model):
         if self.plan in ['free']:
             self.monthly_chat_messages_used += 1
             self.save()
+
+    def can_use_reminders(self):
+        """Check if user can use the reminders feature"""
+        return self.plan in ['plus', 'pro']

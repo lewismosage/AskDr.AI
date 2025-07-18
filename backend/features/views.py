@@ -85,3 +85,15 @@ def check_medication_qa_access(request):
         })
     except Exception as e:
         return Response({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_reminder_access(request):
+    try:
+        profile = request.user.profile
+        return Response({
+            'has_access': profile.can_use_reminders(),
+            'plan': profile.plan
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)

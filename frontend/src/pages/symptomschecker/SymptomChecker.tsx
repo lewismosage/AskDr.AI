@@ -5,7 +5,7 @@ import { fetchNearbyClinics } from "../../lip/apiHelpers";
 import api from "../../lip/api";
 
 // Constants
-const SYMPTOM_CHECK_LIMIT = 2;
+const SYMPTOM_CHECK_LIMIT = 10;
 const STORAGE_KEY = "symptomCheckCount";
 
 const SymptomChecker = () => {
