@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import {
-  ArrowLeft,
-  Search,
-  AlertTriangle,
-  Clock,
-  Thermometer,
-  Lock,
-} from "lucide-react";
+import { ArrowLeft, Search, AlertTriangle, Lock } from "lucide-react";
 import { fetchNearbyClinics } from "../../lip/apiHelpers";
-import axios from "../../lip/api";
+import api from "../../lip/api";
 
 // Constants
 const SYMPTOM_CHECK_LIMIT = 2;
@@ -22,6 +15,10 @@ const SymptomChecker = () => {
   const [note, setNote] = useState<string>("");
   const [checkCount, setCheckCount] = useState(0);
   const [showLimitMessage, setShowLimitMessage] = useState(false);
+  const [userPlan, setUserPlan] = useState<"free" | "plus" | "pro" | null>(
+    null
+  );
+  const [checksAllowed, setChecksAllowed] = useState<number | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -36,7 +33,7 @@ const SymptomChecker = () => {
     }
   }, []);
 
-  // Check authentication status
+  // Check authentication status and plan
   useEffect(() => {
     const accessToken = localStorage.getItem("accessToken");
     if (accessToken) {
@@ -44,8 +41,23 @@ const SymptomChecker = () => {
       localStorage.removeItem(STORAGE_KEY);
       setCheckCount(0);
       setShowLimitMessage(false);
+      checkFeatureAccess(); // Check user's plan and check limits
     }
   }, []);
+
+  // Check backend access for authenticated users
+  const checkFeatureAccess = async () => {
+    try {
+      const response = await api.get("/features/check-symptom-access/");
+      setUserPlan(response.data.plan);
+      setChecksAllowed(response.data.checks_allowed);
+      if (!response.data.has_access) {
+        setShowLimitMessage(true);
+      }
+    } catch (error) {
+      console.error("Error checking feature access:", error);
+    }
+  };
 
   const incrementCheckCount = () => {
     const newCount = checkCount + 1;
@@ -78,17 +90,40 @@ const SymptomChecker = () => {
           }
         : {};
 
-      const res = await axios.post(
-        "/symptoms/check/",
-        { symptoms },
-        { headers }
-      );
+      const res = await api.post("/symptoms/check/", { symptoms }, { headers });
       const data = res.data || {};
       setResults(data.conditions || []);
       setNote(data.note || "");
     } catch (error: any) {
-      setResults([]);
-      setNote("Sorry, there was an error analyzing your symptoms.");
+      let errorMsg = "Sorry, there was an error analyzing your symptoms.";
+
+      if (error?.response?.data?.error === "message_limit_reached") {
+        errorMsg = `You've reached your monthly symptom check limit. ${
+          userPlan === "free"
+            ? "Upgrade your plan to continue using this feature."
+            : "Please try again next month."
+        }`;
+
+        // Force update the UI to show upgrade options
+        if (!userPlan) {
+          try {
+            const response = await api.get(
+              "/features/check-feature-access/?feature=symptom_check"
+            );
+            setUserPlan(response.data.plan);
+            setChecksAllowed(response.data.checks_allowed);
+          } catch (err) {
+            console.error("Error checking feature access:", err);
+          }
+        }
+        setShowLimitMessage(true);
+      } else if (error?.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
+      } else if (error?.response?.data?.error) {
+        errorMsg += `\n${error.response.data.error}`;
+      }
+
+      setNote(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +167,10 @@ const SymptomChecker = () => {
 
   // Check if user has reached the limit
   const accessToken = localStorage.getItem("accessToken");
-  const hasReachedLimit = showLimitMessage && !accessToken;
+  const hasReachedLimit =
+    showLimitMessage ||
+    (!accessToken && checkCount >= SYMPTOM_CHECK_LIMIT) ||
+    (userPlan === "free" && checkCount >= (checksAllowed || 5));
 
   return (
     <div className="min-h-screen bg-background py-8">
@@ -179,26 +217,56 @@ const SymptomChecker = () => {
             <div className="mb-6 bg-white border border-yellow-200 rounded-lg p-4 shadow-sm">
               <div className="flex items-center">
                 <Lock className="h-5 w-5 text-yellow-500 mr-2" />
-                <h3 className="font-medium text-gray-900">Limit Reached</h3>
+                <h3 className="font-medium text-gray-900">
+                  {!accessToken
+                    ? "Limit Reached"
+                    : userPlan === "free"
+                    ? "Monthly Limit Reached"
+                    : "Limit Reached"}
+                </h3>
               </div>
               <p className="text-sm text-gray-600 mt-2">
-                You've used your {SYMPTOM_CHECK_LIMIT} free symptom checks this
-                month. Please sign in to continue using this feature.
+                {!accessToken
+                  ? `You've used your ${SYMPTOM_CHECK_LIMIT} free symptom checks. Sign in to continue.`
+                  : userPlan === "free"
+                  ? `You've used all ${checksAllowed} free symptom checks this month. Upgrade to continue.`
+                  : "You need to be subscribed to continue using this feature."}
               </p>
-              <div className="mt-4 flex flex-col space-y-2">
-                <button
-                  onClick={() =>
-                    navigate(
-                      `/auth?from=${encodeURIComponent(location.pathname)}`
-                    )
-                  }
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                >
-                  Sign In to Continue
-                </button>
-                <p className="text-xs text-gray-500 text-center">
-                  Already signed in? Refresh the page
-                </p>
+              <div className="mt-4 flex gap-2">
+                {!accessToken ? (
+                  <button
+                    onClick={() =>
+                      navigate(
+                        `/auth?from=${encodeURIComponent(location.pathname)}`
+                      )
+                    }
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                  >
+                    Sign In
+                  </button>
+                ) : userPlan === "free" ? (
+                  <>
+                    <Link
+                      to="/pricing"
+                      className="flex-1 text-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                    >
+                      Upgrade Plan
+                    </Link>
+                    <button
+                      onClick={() => setShowLimitMessage(false)}
+                      className="flex-1 text-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    to="/pricing"
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                  >
+                    View Plans
+                  </Link>
+                )}
               </div>
             </div>
           )}
@@ -219,7 +287,9 @@ const SymptomChecker = () => {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none disabled:opacity-50"
                 placeholder={
                   hasReachedLimit
-                    ? "Sign in to continue using symptom checker..."
+                    ? accessToken
+                      ? "Upgrade your plan to continue using symptom checker..."
+                      : "Sign in to continue using symptom checker..."
                     : "Describe your symptoms here... (e.g., I have been experiencing a runny nose, sneezing, and mild headache for the past 2 days)"
                 }
                 required
@@ -245,6 +315,11 @@ const SymptomChecker = () => {
             </button>
           </form>
 
+          {userPlan === "free" && !hasReachedLimit && (
+            <div className="text-xs text-gray-500 mt-2 text-right">
+              Symptom checks used: {checkCount}/{checksAllowed}
+            </div>
+          )}
           {!hasReachedLimit && !accessToken && (
             <p className="text-xs text-gray-500 mt-2 text-center">
               Free symptom checks remaining: {SYMPTOM_CHECK_LIMIT - checkCount}{" "}

@@ -13,6 +13,8 @@ const MedicationQA = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [qaCount, setQACount] = useState(0);
   const [showLimitMessage, setShowLimitMessage] = useState(false);
+  const [userPlan, setUserPlan] = useState<"free" | "plus" | "pro" | null>(null);
+  const [questionsAllowed, setQuestionsAllowed] = useState<number | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,7 +29,7 @@ const MedicationQA = () => {
     }
   }, []);
 
-  // Check authentication status
+  // Check authentication status and plan
   useEffect(() => {
     const accessToken = localStorage.getItem("accessToken");
     if (accessToken) {
@@ -35,8 +37,23 @@ const MedicationQA = () => {
       localStorage.removeItem(STORAGE_KEY);
       setQACount(0);
       setShowLimitMessage(false);
+      checkFeatureAccess(); // Check user's plan and question limits
     }
   }, []);
+
+  // Check backend access for authenticated users
+  const checkFeatureAccess = async () => {
+    try {
+      const response = await api.get("/features/check-medication-qa-access/");
+      setUserPlan(response.data.plan);
+      setQuestionsAllowed(response.data.questions_allowed);
+      if (!response.data.has_access) {
+        setShowLimitMessage(true);
+      }
+    } catch (error) {
+      console.error("Error checking feature access:", error);
+    }
+  };
 
   const incrementQACount = () => {
     const newCount = qaCount + 1;
@@ -71,10 +88,33 @@ const MedicationQA = () => {
       const res = await api.post("medications/ask/", { question }, { headers });
       setResponse(res.data);
     } catch (err: any) {
-      setResponse(
-        err.response?.data?.error ||
-          "Sorry, we couldn't get a response. Please try again later."
-      );
+      let errorMsg = "Sorry, we couldn't get a response. Please try again later.";
+      
+      if (err?.response?.data?.error === "message_limit_reached") {
+        errorMsg = `You've reached your monthly medication question limit. ${
+          userPlan === "free"
+            ? "Upgrade your plan to continue using this feature."
+            : "Please try again next month."
+        }`;
+        
+        // Force update the UI to show upgrade options
+        if (!userPlan) {
+          try {
+            const response = await api.get("/features/check-feature-access/?feature=medication_qa");
+            setUserPlan(response.data.plan);
+            setQuestionsAllowed(response.data.questions_allowed);
+          } catch (error) {
+            console.error("Error checking feature access:", error);
+          }
+        }
+        setShowLimitMessage(true);
+      } else if (err?.response?.data?.detail) {
+        errorMsg = err.response.data.detail;
+      } else if (err?.response?.data?.error) {
+        errorMsg += `\n${err.response.data.error}`;
+      }
+
+      setResponse({ summary: errorMsg });
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +122,10 @@ const MedicationQA = () => {
 
   // Check if user has reached the limit
   const accessToken = localStorage.getItem("accessToken");
-  const hasReachedLimit = showLimitMessage && !accessToken;
+  const hasReachedLimit =
+    showLimitMessage ||
+    (!accessToken && qaCount >= MEDICATION_QA_LIMIT) ||
+    (userPlan === "free" && qaCount >= (questionsAllowed || 10));
 
   const safetyTips = [
     {
@@ -150,26 +193,56 @@ const MedicationQA = () => {
             <div className="mb-6 bg-white border border-yellow-200 rounded-lg p-4 shadow-sm">
               <div className="flex items-center">
                 <Lock className="h-5 w-5 text-yellow-500 mr-2" />
-                <h3 className="font-medium text-gray-900">Limit Reached</h3>
+                <h3 className="font-medium text-gray-900">
+                  {!accessToken
+                    ? "Limit Reached"
+                    : userPlan === "free"
+                    ? "Monthly Limit Reached"
+                    : "Limit Reached"}
+                </h3>
               </div>
               <p className="text-sm text-gray-600 mt-2">
-                You've used your {MEDICATION_QA_LIMIT} free medication questions
-                this month. Please sign in to continue using this feature.
+                {!accessToken
+                  ? `You've used your ${MEDICATION_QA_LIMIT} free medication questions. Sign in to continue.`
+                  : userPlan === "free"
+                  ? `You've used all ${questionsAllowed} free medication questions this month. Upgrade to continue.`
+                  : "You need to be subscribed to continue using this feature."}
               </p>
-              <div className="mt-4 flex flex-col space-y-2">
-                <button
-                  onClick={() =>
-                    navigate(
-                      `/auth?from=${encodeURIComponent(location.pathname)}`
-                    )
-                  }
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                >
-                  Sign In to Continue
-                </button>
-                <p className="text-xs text-gray-500 text-center">
-                  Already signed in? Refresh the page
-                </p>
+              <div className="mt-4 flex gap-2">
+                {!accessToken ? (
+                  <button
+                    onClick={() =>
+                      navigate(
+                        `/auth?from=${encodeURIComponent(location.pathname)}`
+                      )
+                    }
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                  >
+                    Sign In
+                  </button>
+                ) : userPlan === "free" ? (
+                  <>
+                    <Link
+                      to="/pricing"
+                      className="flex-1 text-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                    >
+                      Upgrade Plan
+                    </Link>
+                    <button
+                      onClick={() => setShowLimitMessage(false)}
+                      className="flex-1 text-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    to="/pricing"
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                  >
+                    View Plans
+                  </Link>
+                )}
               </div>
             </div>
           )}
@@ -190,7 +263,9 @@ const MedicationQA = () => {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary resize-none disabled:opacity-50"
                 placeholder={
                   hasReachedLimit
-                    ? "Sign in to continue asking about medications..."
+                    ? accessToken
+                      ? "Upgrade your plan to continue asking about medications..."
+                      : "Sign in to continue asking about medications..."
                     : "Ask about your medications... (e.g., Can I take ibuprofen with acetaminophen? What are the side effects of...?)"
                 }
                 required
@@ -216,6 +291,11 @@ const MedicationQA = () => {
             </button>
           </form>
 
+          {userPlan === "free" && !hasReachedLimit && (
+            <div className="text-xs text-gray-500 mt-2 text-right">
+              Medication questions used: {qaCount}/{questionsAllowed}
+            </div>
+          )}
           {!hasReachedLimit && !accessToken && (
             <p className="text-xs text-gray-500 mt-2 text-center">
               Free medication questions remaining:{" "}

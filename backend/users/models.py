@@ -14,8 +14,9 @@ class UserProfile(models.Model):
     stripe_customer_id = models.CharField(max_length=100, blank=True, null=True)
     stripe_subscription_id = models.CharField(max_length=100, blank=True, null=True)
     monthly_symptom_checks_used = models.PositiveIntegerField(default=0)
-    last_reset_date = models.DateField(auto_now_add=True)
+    monthly_medication_questions_used = models.PositiveIntegerField(default=0)
     monthly_chat_messages_used = models.PositiveIntegerField(default=0)
+    last_reset_date = models.DateField(auto_now_add=True)
     
     def __str__(self):
         return f"{self.user.username} - {self.plan}"
@@ -25,6 +26,8 @@ class UserProfile(models.Model):
         today = date.today()
         if today.month != self.last_reset_date.month or today.year != self.last_reset_date.year:
             self.monthly_symptom_checks_used = 0
+            self.monthly_medication_questions_used = 0
+            self.monthly_chat_messages_used = 0
             self.last_reset_date = today
             self.save()
     
@@ -34,6 +37,10 @@ class UserProfile(models.Model):
         if feature_name == 'symptom_check':
             if self.plan == 'free':
                 return self.monthly_symptom_checks_used < 5
+            return True
+        elif feature_name == 'medication_qa':
+            if self.plan == 'free':
+                return self.monthly_medication_questions_used < 10
             return True
         elif feature_name == 'advanced_ai':
             return self.plan in ['plus', 'pro']
@@ -47,6 +54,12 @@ class UserProfile(models.Model):
     def record_feature_usage(self, feature_name):
         if feature_name == 'symptom_check' and self.plan == 'free':
             self.monthly_symptom_checks_used += 1
+            self.save()
+        elif feature_name == 'medication_qa' and self.plan == 'free':
+            self.monthly_medication_questions_used += 1
+            self.save()
+        elif feature_name == 'chat' and self.plan == 'free':
+            self.monthly_chat_messages_used += 1
             self.save()
 
     def has_active_subscription(self):

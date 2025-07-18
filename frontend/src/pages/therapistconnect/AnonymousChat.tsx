@@ -40,6 +40,8 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
   const [showLimitMessage, setShowLimitMessage] = useState(false);
+  const [userPlan, setUserPlan] = useState<"free" | "plus" | "pro" | null>(null);
+  const [messagesAllowed, setMessagesAllowed] = useState<number | null>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,11 +53,26 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
       localStorage.removeItem(STORAGE_KEY);
       setMessageCount(0);
       setShowLimitMessage(false);
+      checkChatAccess(); // Check user's plan and message limits
     } else if (messageCount >= MESSAGE_LIMIT) {
       // Redirect to auth with return path if limit reached
       navigate(`/auth?from=${encodeURIComponent(location.pathname)}`);
     }
   }, [messageCount, navigate, location.pathname]);
+
+  // Check backend access for authenticated users
+  const checkChatAccess = async () => {
+    try {
+      const response = await axios.get("/features/check-chat-access/");
+      setUserPlan(response.data.plan);
+      setMessagesAllowed(response.data.messages_allowed);
+      if (!response.data.has_access) {
+        setShowLimitMessage(true);
+      }
+    } catch (error) {
+      console.error("Error checking chat access:", error);
+    }
+  };
 
   // Initialize message count from localStorage
   useEffect(() => {
@@ -144,9 +161,31 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
     } catch (error: any) {
       let errorMsg =
         "Sorry, there was an error getting a response from the MentalWell AI.";
-      if (error?.response?.data?.error) {
+      
+      if (error?.response?.data?.error === "message_limit_reached") {
+        errorMsg = `You've reached your monthly message limit. ${
+          userPlan === "free"
+            ? "Upgrade your plan to continue chatting."
+            : "Please try again next month."
+        }`;
+        
+        // Force update the UI to show upgrade options
+        if (!userPlan) {
+          try {
+            const response = await axios.get("/api/features/check-chat-access/");
+            setUserPlan(response.data.plan);
+            setMessagesAllowed(response.data.messages_allowed);
+          } catch (err) {
+            console.error("Error checking chat access:", err);
+          }
+        }
+        setShowLimitMessage(true);
+      } else if (error?.response?.data?.detail) {
+        errorMsg = error.response.data.detail;
+      } else if (error?.response?.data?.error) {
         errorMsg += `\n${error.response.data.error}`;
       }
+
       const aiResponse: Message = {
         id: messages.length + 2,
         text: errorMsg,
@@ -161,7 +200,10 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
 
   // Check if user has reached the message limit
   const accessToken = localStorage.getItem("accessToken");
-  const hasReachedLimit = showLimitMessage && !accessToken;
+  const hasReachedLimit =
+    showLimitMessage ||
+    (!accessToken && messageCount >= MESSAGE_LIMIT) ||
+    (userPlan === "free" && messageCount >= (messagesAllowed || 10));
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-8">
@@ -205,6 +247,8 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
                     className={`px-4 py-3 rounded-lg ${
                       message.sender === "user"
                         ? "bg-primary text-white"
+                        : message.text.toLowerCase().includes("error")
+                        ? "bg-red-50 border border-red-200" // Special styling for error messages
                         : "bg-gray-100 text-gray-800"
                     }`}
                   >
@@ -257,30 +301,61 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
               </div>
             )}
 
-          {hasReachedLimit && (
-            <div className="flex justify-center">
-              <div className="bg-white border border-yellow-200 rounded-lg p-4 max-w-md w-full shadow-sm">
-                <div className="flex items-center">
-                  <Lock className="h-5 w-5 text-yellow-500 mr-2" />
-                  <h3 className="font-medium text-gray-900">Message Limit Reached</h3>
-                </div>
-                <p className="text-sm text-gray-600 mt-2">
-                  You've used your {MESSAGE_LIMIT} free messages this month.
-                </p>
-                <div className="mt-4 flex flex-col space-y-2">
-                  <button
-                    onClick={() => navigate(`/auth?from=${encodeURIComponent(location.pathname)}`)}
-                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                  >
-                    Sign In to Continue
-                  </button>
-                  <p className="text-xs text-gray-500 text-center">
-                    Already signed in? Refresh the page
+            {hasReachedLimit && (
+              <div className="flex justify-center">
+                <div className="bg-white border border-yellow-200 rounded-lg p-4 max-w-md w-full shadow-sm">
+                  <div className="flex items-center">
+                    <Lock className="h-5 w-5 text-yellow-500 mr-2" />
+                    <h3 className="font-medium text-gray-900">
+                      {!accessToken
+                        ? "Message Limit Reached"
+                        : userPlan === "free"
+                        ? "Monthly Limit Reached"
+                        : "Message Limit Reached"}
+                    </h3>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    {!accessToken
+                      ? "Sign in to continue using the chat assistant."
+                      : userPlan === "free"
+                      ? `You've used all ${messagesAllowed} free messages this month. Upgrade to continue chatting.`
+                      : "You need to be subscribed to continue using the chat assistant."}
                   </p>
+                  <div className="mt-4 flex gap-2">
+                    {!accessToken ? (
+                      <button
+                        onClick={() => navigate(`/auth?from=${encodeURIComponent(location.pathname)}`)}
+                        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                      >
+                        Sign In
+                      </button>
+                    ) : userPlan === "free" ? (
+                      <>
+                        <Link
+                          to="/pricing"
+                          className="flex-1 text-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                        >
+                          Upgrade Plan
+                        </Link>
+                        <button
+                          onClick={() => setShowLimitMessage(false)}
+                          className="flex-1 text-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          Dismiss
+                        </button>
+                      </>
+                    ) : (
+                      <Link
+                        to="/pricing"
+                        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                      >
+                        View Plans
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
           </div>
 
           {/* Input */}
@@ -292,7 +367,9 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder={
                   hasReachedLimit
-                    ? "Sign in to continue chatting..."
+                    ? accessToken
+                      ? "Upgrade your plan to continue chatting..."
+                      : "Sign in to continue chatting..."
                     : "Share what's on your mind... (completely anonymous)"
                 }
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50"
@@ -306,6 +383,11 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
                 <Send className="h-5 w-5" />
               </button>
             </form>
+            {userPlan === "free" && !hasReachedLimit && (
+              <div className="text-xs text-gray-500 mt-1 text-right">
+                Messages used: {messageCount}/{messagesAllowed}
+              </div>
+            )}
             {!hasReachedLimit && !accessToken && (
               <p className="text-xs text-gray-500 mt-2 text-center">
                 Free messages remaining: {MESSAGE_LIMIT - messageCount} of{" "}

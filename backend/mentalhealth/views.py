@@ -93,6 +93,16 @@ def daily_journal_prompts(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def anonymous_chat(request):
+    # For authenticated users, check message limits
+    if request.user.is_authenticated:
+        profile = request.user.profile
+        if not profile.can_use_chat_feature():
+            return Response({
+                "error": "message_limit_reached",
+                "detail": f"You've used your {profile.monthly_chat_messages_used} of {10 if profile.plan == 'free' else 'unlimited'} messages this month.",
+                "upgrade_url": "/pricing" if profile.plan == 'free' else None
+            }, status=403)
+
     user_input = request.data.get("message", "")
     session_id = request.data.get("session_id") 
 
@@ -104,9 +114,9 @@ def anonymous_chat(request):
             try:
                 session = ChatSession.objects.get(id=session_id)
             except ChatSession.DoesNotExist:
-                session = ChatSession.objects.create()
+                session = ChatSession.objects.create(user=request.user if request.user.is_authenticated else None)
         else:
-            session = ChatSession.objects.create()
+            session = ChatSession.objects.create(user=request.user if request.user.is_authenticated else None)
 
         # Fetch last N messages (limit for token safety)
         history = ChatMessage.objects.filter(session=session).order_by("timestamp")[:20]
@@ -149,6 +159,11 @@ def anonymous_chat(request):
         # Save both messages
         ChatMessage.objects.create(session=session, role="user", content=user_input)
         ChatMessage.objects.create(session=session, role="assistant", content=reply)
+
+        # Record usage for authenticated free users
+        if request.user.is_authenticated and request.user.profile.plan == 'free':
+            request.user.profile.record_chat_message()
+            request.user.profile.save()
 
         # Format the assistant reply
         formatted = reply.strip()
