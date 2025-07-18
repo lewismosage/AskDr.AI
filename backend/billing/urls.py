@@ -10,4 +10,7 @@ urlpatterns = [
     path('subscription-status/', get_subscription_status, name='subscription-status'),
     path('cancel-subscription/', cancel_subscription, name='cancel-subscription'),
     path('update-payment-method/', update_payment_method, name='update-payment-method'),
+
+   
+    path('subscription-status', get_subscription_status),
 ]
