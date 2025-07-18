@@ -22,7 +22,7 @@ def create_subscription(request):
     price_ids = {
         "plus": {
             "monthly": "price_1RkOtiCWhrsZxJu1aLcxFSHu",
-            "annual": "price_1RkOq8CWhrsZxJu14eqxePRl"
+            "annual": "price_1RmDPQCWhrsZxJu1QHrmtwWY"
         },
         "pro": {
             "monthly": "price_1RkOpPCWhrsZxJu18WV1Zj8S",
