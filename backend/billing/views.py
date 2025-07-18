@@ -13,6 +13,7 @@ from django.http import HttpResponse
 import logging
 
 stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', os.getenv('STRIPE_SECRET_KEY'))
+logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @login_required
@@ -35,7 +36,6 @@ def create_subscription(request):
         return Response({"error": "Invalid plan or billing cycle"}, status=400)
     
     try:
-        # Get or create customer
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
         
         if not profile.stripe_customer_id:
@@ -51,7 +51,6 @@ def create_subscription(request):
             profile.stripe_customer_id = customer.id
             profile.save()
         
-        # Verify the price exists and is active
         try:
             price = stripe.Price.retrieve(price_ids[plan][billing_cycle])
             if not price.active:
@@ -59,7 +58,6 @@ def create_subscription(request):
         except stripe.error.InvalidRequestError:
             return Response({"error": "Invalid price ID for the selected plan"}, status=400)
         
-        # Create checkout session
         session = stripe.checkout.Session.create(
             customer=profile.stripe_customer_id,
             payment_method_types=['card'],
@@ -81,8 +79,7 @@ def create_subscription(request):
         
         return Response({"sessionId": session.id})
     except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error creating subscription: {str(e)}")
+        logger.error(f"Subscription creation error for user {request.user.id}: {str(e)}", exc_info=True)
         return Response({"error": "An error occurred while processing your request"}, status=500)
 
 @require_POST
@@ -92,37 +89,27 @@ def stripe_webhook(request):
     sig_header = request.META['HTTP_STRIPE_SIGNATURE']
     endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
 
-    # Add logging
-    logger = logging.getLogger(__name__)
-    logger.info("Webhook received")
-
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, endpoint_secret
-        )
-        logger.info(f"Webhook event type: {event['type']}")
+        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
+        logger.info(f"Processing webhook: {event['type']}")
     except ValueError as e:
-        logger.error(f"ValueError in webhook: {str(e)}")
+        logger.error(f"Webhook ValueError: {str(e)}")
         return HttpResponse(status=400)
     except stripe.error.SignatureVerificationError as e:
-        logger.error(f"Signature verification error: {str(e)}")
+        logger.error(f"Webhook signature error: {str(e)}")
         return HttpResponse(status=400)
 
     try:
-        # Handle subscription events
         if event['type'] == 'customer.subscription.created':
             subscription = event['data']['object']
-            logger.info(f"Raw subscription: {subscription}")  # Add this for debugging
-            # Get customer ID from subscription
             customer_id = subscription.customer
             try:
                 profile = UserProfile.objects.get(stripe_customer_id=customer_id)
-                # Use metadata from subscription or default to plus
                 plan = subscription.metadata.get('plan', 'plus')
                 profile.plan = plan
                 profile.stripe_subscription_id = subscription.id
                 profile.save()
-                logger.info(f"Updated user {profile.user.id} to plan {plan}")
+                logger.info(f"Updated user {profile.user.id} to {plan} plan")
             except UserProfile.DoesNotExist:
                 logger.error(f"No profile found for customer {customer_id}")
 
@@ -131,21 +118,16 @@ def stripe_webhook(request):
             try:
                 profile = UserProfile.objects.get(stripe_subscription_id=subscription.id)
                 metadata = subscription.get('metadata', {})
-                if subscription['status'] in ['active', 'trialing']:
-                    profile.plan = metadata.get('plan', 'free')
-                else:
-                    profile.plan = 'free'
+                profile.plan = metadata.get('plan', 'free') if subscription['status'] in ['active', 'trialing'] else 'free'
                 profile.save()
             except UserProfile.DoesNotExist:
                 pass
 
         elif event['type'] == 'invoice.payment_succeeded':
             invoice = event['data']['object']
-            subscription_id = invoice.get('subscription')
-            if subscription_id:
+            if subscription_id := invoice.get('subscription'):
                 try:
-                    profile = UserProfile.objects.get(stripe_subscription_id=subscription_id)
-                    profile.save()  # Update any necessary fields
+                    UserProfile.objects.get(stripe_subscription_id=subscription_id)
                 except UserProfile.DoesNotExist:
                     pass
 
@@ -168,12 +150,8 @@ def stripe_webhook(request):
 @api_view(['GET'])
 @login_required
 def get_subscription_status(request):
-    logger = logging.getLogger(__name__)
-    
     try:
-        # Get or create profile (should always exist for authenticated users)
         profile, created = UserProfile.objects.get_or_create(user=request.user)
-        logger.info(f"Subscription status requested for user {request.user.id}, profile: {profile.id}")
         
         subscription_data = {
             'plan': profile.plan,
@@ -182,7 +160,6 @@ def get_subscription_status(request):
             'cancel_at_period_end': False
         }
 
-        # Only check Stripe if we have a subscription ID
         if profile.stripe_subscription_id:
             try:
                 subscription = stripe.Subscription.retrieve(profile.stripe_subscription_id)
@@ -191,22 +168,17 @@ def get_subscription_status(request):
                     'current_period_end': subscription.current_period_end,
                     'cancel_at_period_end': subscription.cancel_at_period_end
                 })
-                logger.info(f"Stripe subscription found: {subscription.id}, status: {subscription.status}")
-            except stripe.error.InvalidRequestError as e:
-                logger.warning(f"Stripe subscription not found: {profile.stripe_subscription_id}. Error: {str(e)}")
+            except stripe.error.InvalidRequestError:
                 profile.stripe_subscription_id = None
                 profile.save()
             except Exception as e:
-                logger.error(f"Error retrieving Stripe subscription: {str(e)}")
+                logger.warning(f"Stripe subscription retrieval error: {str(e)}")
 
         return Response(subscription_data)
         
     except Exception as e:
-        logger.error(f"Error in get_subscription_status: {str(e)}")
-        return Response({
-            'error': 'Could not retrieve subscription status',
-            'details': str(e)
-        }, status=500)
+        logger.error(f"Subscription status error: {str(e)}", exc_info=True)
+        return Response({'error': 'Could not retrieve subscription status'}, status=500)
 
 @api_view(['POST'])
 @login_required
@@ -217,6 +189,7 @@ def cancel_subscription(request):
             return Response({'success': True})
         return Response({'error': 'No active subscription to cancel'}, status=400)
     except Exception as e:
+        logger.error(f"Subscription cancellation error: {str(e)}", exc_info=True)
         return Response({'error': str(e)}, status=400)
 
 @api_view(['POST'])
@@ -232,4 +205,5 @@ def update_payment_method(request):
             return Response({'success': True})
         return Response({'error': 'Failed to update payment method'}, status=400)
     except Exception as e:
+        logger.error(f"Payment method update error: {str(e)}", exc_info=True)
         return Response({'error': str(e)}, status=400)

@@ -67,8 +67,8 @@ const ThankYou = () => {
       return {
         title: "Verification Failed",
         message: error,
-        buttonText: "Go to Dashboard",
-        buttonLink: "/dashboard",
+        buttonText: null,
+        buttonLink: null,
       };
     }
 
@@ -76,8 +76,8 @@ const ThankYou = () => {
       return {
         title: "Processing your subscription...",
         message: "Please wait while we verify your payment.",
-        buttonText: "Continue",
-        buttonLink: "/dashboard",
+        buttonText: null,
+        buttonLink: null,
       };
     }
 
@@ -86,8 +86,8 @@ const ThankYou = () => {
         title: "Thank you for subscribing!",
         message:
           "Your subscription has been activated. You now have access to all premium features.",
-        buttonText: "Go to Dashboard",
-        buttonLink: "/dashboard",
+        buttonText: null,
+        buttonLink: null,
       };
     }
 
@@ -98,31 +98,31 @@ const ThankYou = () => {
           title: "Payment Processed!",
           message:
             "Thank you for your subscription. Your access will be available shortly.",
-          buttonText: "Go to Dashboard",
-          buttonLink: "/dashboard",
+          buttonText: null,
+          buttonLink: null,
         };
       case "signup":
         return {
           title: "Welcome to AskDr.AI!",
           message:
             "Your account has been created successfully. Start your health journey with our AI assistant.",
-          buttonText: "Explore Features",
-          buttonLink: "/dashboard",
+          buttonText: null,
+          buttonLink: null,
         };
       case "contact":
         return {
           title: "Message sent successfully!",
           message:
             "Thank you for contacting us. We'll get back to you within 24 hours.",
-          buttonText: "Return Home",
-          buttonLink: "/",
+          buttonText: null,
+          buttonLink: null,
         };
       default:
         return {
           title: "Thank you!",
           message: "Your action has been completed successfully.",
-          buttonText: "Continue",
-          buttonLink: "/dashboard",
+          buttonText: null,
+          buttonLink: null,
         };
     }
   };
@@ -146,7 +146,6 @@ const ThankYou = () => {
               <CheckCircle className="h-12 w-12 text-green-600" />
             </div>
           )}
-
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
             {content.title}
           </h1>
@@ -156,22 +155,14 @@ const ThankYou = () => {
         </div>
 
         <div className="space-y-4">
+          {/* Only show Return to Home link */}
           <Link
-            to={content.buttonLink}
+            to="/"
             className="w-full bg-primary text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-primary-dark transition-all duration-200 transform hover:scale-105 flex items-center justify-center group"
           >
-            {content.buttonText}
+            Return to Home
             <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform duration-200" />
           </Link>
-
-          {type !== "contact" && (
-            <Link
-              to="/"
-              className="block text-primary hover:text-primary-dark font-medium transition-colors duration-200"
-            >
-              Return to Home
-            </Link>
-          )}
         </div>
 
         {/* Additional information for successful subscriptions */}
