@@ -11,6 +11,8 @@ from django.contrib.auth.decorators import login_required
 import json
 from django.http import HttpResponse
 import logging
+from services.email_service import send_payment_confirmation
+from datetime import datetime
 
 stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', os.getenv('STRIPE_SECRET_KEY'))
 logger = logging.getLogger(__name__)
@@ -127,9 +129,26 @@ def stripe_webhook(request):
             invoice = event['data']['object']
             if subscription_id := invoice.get('subscription'):
                 try:
-                    UserProfile.objects.get(stripe_subscription_id=subscription_id)
+                    profile = UserProfile.objects.get(stripe_subscription_id=subscription_id)
+                    # Get subscription details for the email
+                    subscription = stripe.Subscription.retrieve(subscription_id)
+                    plan_name = subscription.metadata.get('plan', 'Premium')
+                    
+                    # Prepare invoice data for email
+                    invoice_data = {
+                        'id': invoice['id'],
+                        'amount_paid': invoice['amount_paid'],
+                        'created': invoice['created'],
+                        'plan_name': plan_name.capitalize()
+                    }
+                    
+                    # Send payment confirmation email
+                    send_payment_confirmation(profile.user, invoice_data)
+                
                 except UserProfile.DoesNotExist:
-                    pass
+                    logger.warning(f"No profile found for subscription {subscription_id}")
+                except Exception as e:
+                    logger.error(f"Error processing payment confirmation for invoice {invoice['id']}: {str(e)}", exc_info=True)
 
         elif event['type'] == 'customer.subscription.deleted':
             subscription = event['data']['object']
