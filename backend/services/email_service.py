@@ -248,3 +248,174 @@ def test_smtp_connection():
     except Exception as e:
         print(f"[SMTP TEST] Error: {str(e)}")
         return False
+
+def send_reminder_notification(user, reminder_data):
+    """
+    Send reminder notification email to user
+    Args:
+        user: User object
+        reminder_data: Dictionary with reminder information containing:
+            - title: Reminder title
+            - notes: Optional notes
+            - reminder_type: 'medication' or 'appointment'
+            - due_time: Formatted due time
+            - frequency: Reminder frequency
+    """
+    try:
+        # Validate inputs
+        if not user or not hasattr(user, 'email'):
+            print(f"[REMINDER EMAIL ERROR] Invalid user object provided")
+            logger.error("Invalid user object provided for reminder email")
+            return False
+            
+        if not user.email:
+            print(f"[REMINDER EMAIL ERROR] User has no email address")
+            logger.error("User has no email address for reminder email")
+            return False
+            
+        if not reminder_data:
+            print(f"[REMINDER EMAIL ERROR] No reminder data provided")
+            logger.error("No reminder data provided")
+            return False
+
+        print(f"[REMINDER EMAIL] Starting reminder notification for: {user.email}")
+        logger.info(f"Starting reminder notification for: {user.email}")
+        
+        # Validate reminder data with fallbacks
+        validated_reminder_data = {
+            'title': reminder_data.get('title', 'Reminder'),
+            'notes': reminder_data.get('notes', ''),
+            'reminder_type': reminder_data.get('reminder_type', 'medication'),
+            'due_time': reminder_data.get('due_time', 'Now'),
+            'frequency': reminder_data.get('frequency', 'once')
+        }
+        
+        print(f"[REMINDER EMAIL] Validated reminder data: {validated_reminder_data}")
+        
+        # Get display names for reminder type and frequency
+        REMINDER_TYPES = [
+            ('medication', 'Medication'),
+            ('appointment', 'Appointment'),
+        ]
+        FREQUENCY_CHOICES = [
+            ('once', 'Once'),
+            ('daily', 'Daily'),
+            ('weekly', 'Weekly'),
+            ('monthly', 'Monthly'),
+        ]
+        
+        reminder_type_display = dict(REMINDER_TYPES).get(validated_reminder_data['reminder_type'], 'Reminder')
+        frequency_display = dict(FREQUENCY_CHOICES).get(validated_reminder_data['frequency'], 'Once')
+        
+        # Prepare email context
+        email_context = {
+            'user': user,
+            'title': validated_reminder_data['title'],
+            'notes': validated_reminder_data['notes'],
+            'reminder_type': validated_reminder_data['reminder_type'],
+            'reminder_type_display': reminder_type_display,
+            'due_time': validated_reminder_data['due_time'],
+            'frequency': validated_reminder_data['frequency'],
+            'frequency_display': frequency_display,
+            'COMPANY_NAME': getattr(settings, 'COMPANY_NAME', 'AskDr.AI'),
+            'dashboard_url': getattr(settings, 'FRONTEND_DASHBOARD_URL', 'http://localhost:5173/dashboard')
+        }
+        
+        print(f"[REMINDER EMAIL] Email context prepared: {email_context}")
+        
+        # Validate email settings
+        if not getattr(settings, 'EMAIL_HOST', None):
+            print(f"[REMINDER EMAIL ERROR] EMAIL_HOST not configured")
+            logger.error("EMAIL_HOST not configured for reminder email")
+            return False
+            
+        if not getattr(settings, 'DEFAULT_FROM_EMAIL', None):
+            print(f"[REMINDER EMAIL ERROR] DEFAULT_FROM_EMAIL not configured")
+            logger.error("DEFAULT_FROM_EMAIL not configured for reminder email")
+            return False
+
+        subject = f"🔔 Reminder: {validated_reminder_data['title']} - {settings.COMPANY_NAME}"
+        print(f"[REMINDER EMAIL] Subject: {subject}")
+        
+        # Render HTML content with error handling
+        try:
+            html_content = render_to_string('emails/reminder_notification.html', email_context)
+            print(f"[REMINDER EMAIL] HTML template rendered successfully ({len(html_content)} characters)")
+        except Exception as template_error:
+            print(f"[REMINDER EMAIL ERROR] Template rendering failed: {str(template_error)}")
+            logger.error(f"Reminder template rendering error: {str(template_error)}", exc_info=True)
+            return False
+
+        # Create plain text version
+        try:
+            text_content = strip_tags(html_content)
+            print(f"[REMINDER EMAIL] Plain text version created ({len(text_content)} characters)")
+        except Exception as strip_error:
+            print(f"[REMINDER EMAIL ERROR] Failed to create plain text: {str(strip_error)}")
+            text_content = f"Reminder: {validated_reminder_data['title']} - Due: {validated_reminder_data['due_time']}"
+        
+        # Create email object
+        try:
+            email = EmailMultiAlternatives(
+                subject=subject,
+                body=text_content,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[user.email],
+                reply_to=[getattr(settings, 'SUPPORT_EMAIL', 'support@askdrai.com')]
+            )
+            email.attach_alternative(html_content, "text/html")
+            print(f"[REMINDER EMAIL] Email object created successfully")
+        except Exception as email_create_error:
+            print(f"[REMINDER EMAIL ERROR] Failed to create email object: {str(email_create_error)}")
+            logger.error(f"Reminder email object creation error: {str(email_create_error)}", exc_info=True)
+            return False
+        
+        # Log SMTP configuration
+        print(f"[REMINDER EMAIL] SMTP Config - Host: {getattr(settings, 'EMAIL_HOST', 'Not set')}")
+        print(f"[REMINDER EMAIL] SMTP Config - Port: {getattr(settings, 'EMAIL_PORT', 'Not set')}")
+        print(f"[REMINDER EMAIL] From: {settings.DEFAULT_FROM_EMAIL}")
+        print(f"[REMINDER EMAIL] To: {user.email}")
+        
+        # Send email with retry logic
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                print(f"[REMINDER EMAIL] Attempting to send email (attempt {attempt + 1}/{max_retries})")
+                result = email.send(fail_silently=False)
+                
+                if result == 1:
+                    print(f"[REMINDER EMAIL SUCCESS] Reminder email sent successfully to {user.email}")
+                    logger.info(f"Reminder notification email sent successfully to {user.email}")
+                    return True
+                else:
+                    print(f"[REMINDER EMAIL WARNING] Email send() returned {result} for {user.email}")
+                    logger.warning(f"Reminder email send() returned {result} for {user.email}")
+                    
+            except Exception as send_error:
+                error_msg = str(send_error)
+                print(f"[REMINDER EMAIL ERROR] Send attempt {attempt + 1} failed: {error_msg}")
+                logger.error(f"Reminder email send error (attempt {attempt + 1}): {error_msg}", exc_info=True)
+                
+                # Provide specific guidance for common SMTP errors
+                if "Authentication failed" in error_msg:
+                    print(f"[REMINDER EMAIL ERROR] SMTP Authentication failed. Please check your Brevo credentials.")
+                elif "Please authenticate first" in error_msg:
+                    print(f"[REMINDER EMAIL ERROR] SMTP requires authentication. Check your credentials.")
+                elif "Connection refused" in error_msg:
+                    print(f"[REMINDER EMAIL ERROR] SMTP connection refused. Check EMAIL_HOST and EMAIL_PORT.")
+                
+                if attempt < max_retries - 1:
+                    print(f"[REMINDER EMAIL] Retrying in 2 seconds...")
+                    import time
+                    time.sleep(2)
+                else:
+                    print(f"[REMINDER EMAIL ERROR] All send attempts failed for {user.email}")
+                    logger.error(f"All reminder email send attempts failed for {user.email}")
+                    return False
+        
+        return False
+        
+    except Exception as e:
+        print(f"[REMINDER EMAIL ERROR] Critical reminder email failure: {str(e)}")
+        logger.error(f"CRITICAL REMINDER EMAIL FAILURE: {str(e)}", exc_info=True)
+        return False

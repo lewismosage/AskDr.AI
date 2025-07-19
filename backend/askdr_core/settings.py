@@ -173,6 +173,14 @@ CELERY_TASK_SERIALIZER = 'json'
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
 
+# Celery Beat Schedule
+CELERY_BEAT_SCHEDULE = {
+    'check-due-reminders': {
+        'task': 'reminders.tasks.check_due_reminders',
+        'schedule': 300.0,  # Every 5 minutes
+    },
+}
+
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 
 STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
