@@ -82,7 +82,9 @@ ROOT_URLCONF = 'askdr_core.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [
+            os.path.join(BASE_DIR, 'askdr_core/templates'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -202,6 +204,3 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'support@askdrai.com')
 COMPANY_NAME = os.getenv('COMPANY_NAME', 'AskDr.AI')
 FRONTEND_DASHBOARD_URL = os.getenv('FRONTEND_DASHBOARD_URL', 'http://localhost:5173/dashboard')
-
-# Email template settings
-EMAIL_TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates/emails')

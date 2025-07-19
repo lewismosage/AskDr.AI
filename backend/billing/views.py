@@ -127,28 +127,50 @@ def stripe_webhook(request):
 
         elif event['type'] == 'invoice.payment_succeeded':
             invoice = event['data']['object']
+            logger.info(f"Processing invoice.payment_succeeded for invoice {invoice['id']}")
+            
             if subscription_id := invoice.get('subscription'):
                 try:
+                    # First get the profile
                     profile = UserProfile.objects.get(stripe_subscription_id=subscription_id)
-                    # Get subscription details for the email
-                    subscription = stripe.Subscription.retrieve(subscription_id)
-                    plan_name = subscription.metadata.get('plan', 'Premium')
+                    logger.info(f"PROFILE FOUND: {profile.id} for user {profile.user.id}")
                     
-                    # Prepare invoice data for email
-                    invoice_data = {
-                        'id': invoice['id'],
-                        'amount_paid': invoice['amount_paid'],
-                        'created': invoice['created'],
-                        'plan_name': plan_name.capitalize()
-                    }
+                    # Then get the user with select_related to ensure we have the email
+                    user = profile.user
+                    if not user.email:
+                        logger.error(f"USER HAS NO EMAIL ADDRESS: User ID {user.id}")
+                        return HttpResponse(status=200)
                     
-                    # Send payment confirmation email
-                    send_payment_confirmation(profile.user, invoice_data)
-                
+                    logger.info(f"User email: {user.email}")  # Now safe to log
+                    
+                    # Retrieve subscription details
+                    try:
+                        subscription = stripe.Subscription.retrieve(subscription_id)
+                        plan_name = subscription.metadata.get('plan', 'Premium')
+                        logger.info(f"Found subscription for user {user.id} with plan {plan_name}")
+                        
+                        invoice_data = {
+                            'id': invoice['id'],
+                            'amount_paid': invoice['amount_paid'],
+                            'created': invoice['created'],
+                            'plan_name': plan_name.capitalize()
+                        }
+                        
+                        logger.info(f"Attempting to send payment confirmation to {user.email}")
+                        if send_payment_confirmation(user, invoice_data):
+                            logger.info(f"Payment confirmation sent successfully to {user.email}")
+                        else:
+                            logger.error(f"Failed to send payment confirmation to {user.email}")
+                        
+                    except stripe.error.StripeError as e:
+                        logger.error(f"Stripe error retrieving subscription: {str(e)}")
+                    
                 except UserProfile.DoesNotExist:
-                    logger.warning(f"No profile found for subscription {subscription_id}")
+                    logger.error(f"CRITICAL: No profile found for subscription {subscription_id}")
                 except Exception as e:
-                    logger.error(f"Error processing payment confirmation for invoice {invoice['id']}: {str(e)}", exc_info=True)
+                    logger.error(f"Error processing payment confirmation: {str(e)}", exc_info=True)
+            
+            return HttpResponse(status=200)
 
         elif event['type'] == 'customer.subscription.deleted':
             subscription = event['data']['object']
