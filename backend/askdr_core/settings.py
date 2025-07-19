@@ -195,12 +195,16 @@ LOGGING = {
 }
 # Email Settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Uncomment for testing
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp-relay.brevo.com')
-EMAIL_PORT = os.getenv('EMAIL_PORT', 587)
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', True)
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'savannatek.ke@gmail.com')
 SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'support@askdrai.com')
 COMPANY_NAME = os.getenv('COMPANY_NAME', 'AskDr.AI')
 FRONTEND_DASHBOARD_URL = os.getenv('FRONTEND_DASHBOARD_URL', 'http://localhost:5173/dashboard')
+
+# Add SMTP debug logging
+EMAIL_DEBUG = os.getenv('EMAIL_DEBUG', 'False').lower() == 'true'

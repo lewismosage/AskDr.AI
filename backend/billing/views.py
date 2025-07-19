@@ -128,47 +128,137 @@ def stripe_webhook(request):
         elif event['type'] == 'invoice.payment_succeeded':
             invoice = event['data']['object']
             logger.info(f"Processing invoice.payment_succeeded for invoice {invoice['id']}")
+            print(f"[WEBHOOK] Processing invoice.payment_succeeded for invoice {invoice['id']}")
             
-            if subscription_id := invoice.get('subscription'):
+            # Debug: Print the full invoice structure
+            print(f"[WEBHOOK] Full invoice object keys: {list(invoice.keys())}")
+            print(f"[WEBHOOK] Invoice object: {invoice}")
+            
+            # Try different ways to get subscription ID
+            subscription_id = None
+            
+            # Method 1: Direct subscription field
+            if 'subscription' in invoice and invoice['subscription']:
+                subscription_id = invoice['subscription']
+                print(f"[WEBHOOK] Found subscription ID via direct field: {subscription_id}")
+            
+            # Method 2: From subscription_details
+            elif 'parent' in invoice and invoice['parent'] and 'subscription_details' in invoice['parent']:
+                if 'subscription' in invoice['parent']['subscription_details']:
+                    subscription_id = invoice['parent']['subscription_details']['subscription']
+                    print(f"[WEBHOOK] Found subscription ID via parent.subscription_details: {subscription_id}")
+            
+            # Method 3: From line items
+            elif 'lines' in invoice and invoice['lines'] and 'data' in invoice['lines']:
+                for line_item in invoice['lines']['data']:
+                    if 'parent' in line_item and line_item['parent'] and 'subscription_item_details' in line_item['parent']:
+                        if 'subscription' in line_item['parent']['subscription_item_details']:
+                            subscription_id = line_item['parent']['subscription_item_details']['subscription']
+                            print(f"[WEBHOOK] Found subscription ID via line items: {subscription_id}")
+                            break
+            
+            # Method 4: From customer - find the most recent subscription
+            elif 'customer' in invoice and invoice['customer']:
                 try:
-                    # First get the profile
-                    profile = UserProfile.objects.get(stripe_subscription_id=subscription_id)
-                    logger.info(f"PROFILE FOUND: {profile.id} for user {profile.user.id}")
+                    customer_id = invoice['customer']
+                    print(f"[WEBHOOK] Looking for subscription via customer: {customer_id}")
                     
-                    # Then get the user with select_related to ensure we have the email
+                    # Get customer's subscriptions
+                    subscriptions = stripe.Subscription.list(customer=customer_id, limit=1, status='active')
+                    if subscriptions.data:
+                        subscription_id = subscriptions.data[0].id
+                        print(f"[WEBHOOK] Found subscription ID via customer lookup: {subscription_id}")
+                except Exception as e:
+                    print(f"[WEBHOOK] Error looking up customer subscriptions: {str(e)}")
+            
+            if subscription_id:
+                print(f"[WEBHOOK] Found subscription ID: {subscription_id}")
+                
+                try:
+                    # Step 1: Try to get the user profile by subscription ID first
+                    try:
+                        profile = UserProfile.objects.get(stripe_subscription_id=subscription_id)
+                        print(f"[WEBHOOK] PROFILE FOUND by subscription ID: {profile.id} for user {profile.user.id}")
+                    except UserProfile.DoesNotExist:
+                        # Step 1b: If not found by subscription ID, try by customer ID (handles timing issue)
+                        customer_id = invoice.get('customer')
+                        if customer_id:
+                            try:
+                                profile = UserProfile.objects.get(stripe_customer_id=customer_id)
+                                print(f"[WEBHOOK] PROFILE FOUND by customer ID: {profile.id} for user {profile.user.id}")
+                                # Update the profile with the subscription ID for future reference
+                                profile.stripe_subscription_id = subscription_id
+                                profile.save()
+                                print(f"[WEBHOOK] Updated profile with subscription ID: {subscription_id}")
+                            except UserProfile.DoesNotExist:
+                                logger.error(f"CRITICAL: No profile found for customer {customer_id}")
+                                print(f"[EMAIL ERROR] CRITICAL: No profile found for customer {customer_id}")
+                                return HttpResponse(status=200)
+                        else:
+                            logger.error(f"CRITICAL: No customer ID in invoice")
+                            print(f"[EMAIL ERROR] CRITICAL: No customer ID in invoice")
+                            return HttpResponse(status=200)
+                    
+                    # Step 2: Get user and validate email
                     user = profile.user
                     if not user.email:
                         logger.error(f"USER HAS NO EMAIL ADDRESS: User ID {user.id}")
+                        print(f"[EMAIL ERROR] USER HAS NO EMAIL ADDRESS: User ID {user.id}")
                         return HttpResponse(status=200)
                     
-                    logger.info(f"User email: {user.email}")  # Now safe to log
+                    logger.info(f"User email: {user.email}")
+                    print(f"[WEBHOOK] User email: {user.email}")
                     
-                    # Retrieve subscription details
+                    # Step 3: Prepare invoice data (with fallbacks)
+                    invoice_data = {
+                        'id': invoice.get('id', 'Unknown'),
+                        'amount_paid': invoice.get('amount_paid', 0),
+                        'created': invoice.get('created', int(datetime.now().timestamp())),
+                        'plan_name': 'Premium Plan'  # Default fallback
+                    }
+                    
+                    # Step 4: Try to get subscription details (optional, with fallback)
                     try:
                         subscription = stripe.Subscription.retrieve(subscription_id)
-                        plan_name = subscription.metadata.get('plan', 'Premium')
-                        logger.info(f"Found subscription for user {user.id} with plan {plan_name}")
+                        print(f"[STRIPE] Successfully retrieved subscription: {subscription.id}")
                         
-                        invoice_data = {
-                            'id': invoice['id'],
-                            'amount_paid': invoice['amount_paid'],
-                            'created': invoice['created'],
-                            'plan_name': plan_name.capitalize()
-                        }
-                        
-                        logger.info(f"Attempting to send payment confirmation to {user.email}")
-                        if send_payment_confirmation(user, invoice_data):
-                            logger.info(f"Payment confirmation sent successfully to {user.email}")
+                        # Safely get plan name from metadata
+                        if hasattr(subscription, 'metadata') and subscription.metadata:
+                            plan_name = subscription.metadata.get('plan', 'Premium')
+                            invoice_data['plan_name'] = plan_name.capitalize()
+                            print(f"[STRIPE] Plan name from metadata: {plan_name}")
                         else:
-                            logger.error(f"Failed to send payment confirmation to {user.email}")
-                        
-                    except stripe.error.StripeError as e:
-                        logger.error(f"Stripe error retrieving subscription: {str(e)}")
+                            print(f"[STRIPE] No metadata found, using default plan name")
+                            
+                    except Exception as stripe_error:
+                        logger.warning(f"Could not retrieve subscription details: {str(stripe_error)}")
+                        print(f"[STRIPE WARNING] Could not retrieve subscription details: {str(stripe_error)}")
+                        # Continue with default values
                     
-                except UserProfile.DoesNotExist:
-                    logger.error(f"CRITICAL: No profile found for subscription {subscription_id}")
+                    # Step 5: Log the final invoice data
+                    logger.info(f"Final invoice data: {invoice_data}")
+                    print(f"[WEBHOOK] Final invoice data: {invoice_data}")
+                    
+                    # Step 6: Send payment confirmation email
+                    logger.info(f"Attempting to send payment confirmation to {user.email}")
+                    print(f"[EMAIL] Attempting to send payment confirmation to {user.email}")
+                    
+                    email_sent = send_payment_confirmation(user, invoice_data)
+                    
+                    if email_sent:
+                        logger.info(f"Payment confirmation sent successfully to {user.email}")
+                        print(f"[EMAIL SUCCESS] Payment confirmation sent successfully to {user.email}")
+                    else:
+                        logger.error(f"Failed to send payment confirmation to {user.email}")
+                        print(f"[EMAIL FAILURE] Failed to send payment confirmation to {user.email}")
+                    
                 except Exception as e:
                     logger.error(f"Error processing payment confirmation: {str(e)}", exc_info=True)
+                    print(f"[EMAIL ERROR] Error processing payment confirmation: {str(e)}")
+            else:
+                logger.warning(f"No subscription ID found in invoice {invoice['id']}")
+                print(f"[WEBHOOK WARNING] No subscription ID found in invoice {invoice['id']}")
+                print(f"[WEBHOOK] Cannot send payment confirmation email without subscription ID")
             
             return HttpResponse(status=200)
 
