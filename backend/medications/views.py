@@ -4,29 +4,43 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.conf import settings
 import json
-from rest_framework.exceptions import PermissionDenied
 from users.models import UserProfile
 import logging
+from django.core.exceptions import ObjectDoesNotExist
 
 logger = logging.getLogger(__name__)
 
 # Constants
 FREE_UNAUTHENTICATED_LIMIT = 5
 FREE_AUTHENTICATED_LIMIT = 10
-UNLIMITED_ACCESS = 999999 
+UNLIMITED_ACCESS = 999999
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def medication_qa(request):
-    """
-    Handle medication questions with tiered access:
-    - 5 questions for unauthenticated users
-    - 10 questions for free authenticated users
-    - Unlimited for paid users
-    """
-    # Check for unauthenticated access first
+# System prompt template
+SYSTEM_PROMPT = """
+You are a medical assistant specialized in medication-related questions. Follow these rules strictly:
+
+1. Only respond in valid JSON format.
+2. If the question is about medications (drugs, prescriptions, side effects, interactions):
+{{
+    "summary": "Brief explanation",
+    "precautions": ["list", "of", "precautions"],
+    "advice": "When to consult a doctor"
+}}
+
+3. If NOT about medications (diet, exercise, general health):
+{{
+    "summary": "Sorry, I specialize in medication questions only",
+    "precautions": [],
+    "advice": "Please ask about drugs, prescriptions, side effects or interactions"
+}}
+
+4. Never provide medical advice beyond general information.
+5. Always recommend consulting a healthcare professional.
+"""
+
+def check_access_limits(request):
+    """Handle access limits for both authenticated and unauthenticated users"""
     if not request.user.is_authenticated:
-        # Implement session-based tracking for unauthenticated users
         session = request.session
         questions_used = session.get('unauthenticated_questions_used', 0)
         
@@ -39,11 +53,9 @@ def medication_qa(request):
                 'requires_auth': True
             }, status=403)
         
-        # Increment counter for unauthenticated users
         session['unauthenticated_questions_used'] = questions_used + 1
         session.modified = True
     else:
-        # For authenticated users, check feature access
         try:
             profile = request.user.profile
             if not profile.can_use_feature('medication_qa'):
@@ -54,9 +66,60 @@ def medication_qa(request):
                     'used': profile.monthly_medication_questions_used,
                     'requires_upgrade': profile.plan == 'free'
                 }, status=403)
-        except UserProfile.DoesNotExist:
+        except ObjectDoesNotExist:
             return Response({'error': 'User profile not found'}, status=404)
+    
+    return None
 
+def call_openrouter(prompt):
+    """Make the API call to OpenRouter"""
+    headers = {
+        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+        "HTTP-Referer": settings.FRONTEND_URL or "http://localhost:8000",
+        "X-Title": settings.COMPANY_NAME or "AskDr.AI",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "anthropic/claude-3-haiku",
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.3,
+        "max_tokens": 500
+    }
+
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=15  # Increased timeout for medical queries
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"OpenRouter API request failed: {str(e)}")
+        raise
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def medication_qa(request):
+    """
+    Handle medication questions with:
+    - Access control
+    - Input validation
+    - API call to OpenRouter
+    - Response processing
+    """
+    # Check access limits first
+    access_check = check_access_limits(request)
+    if access_check:
+        return access_check
+
+    # Validate input
     question = request.data.get("question", "").strip()
     if not question:
         return Response({"error": "No question provided"}, status=400)
@@ -67,58 +130,11 @@ def medication_qa(request):
             logger.error("OpenRouter API key not configured")
             return Response({"error": "Service configuration error"}, status=500)
 
-        # Prepare the AI prompt
-        prompt = f"""
-You are a helpful medical assistant. The user asked: "{question}"
-
-Respond with valid JSON using this format:
-
-{{
-  "summary": "Brief explanation about the medication.",
-  "precautions": [
-    "Key precaution 1",
-    "Key precaution 2",
-    "..."
-  ],
-  "advice": "Final recommendation, such as consulting a doctor."
-}}
-
-Return only valid JSON, no markdown or additional text.
-"""
-
-        # Call the AI API with required headers
-        headers = {
-            "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-            "HTTP-Referer": "http://localhost:8000",  # Required by OpenRouter
-            "X-Title": "AskDr.AI",  # Required by OpenRouter
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "model": "anthropic/claude-3-haiku",
-            "messages": [
-                {"role": "system", "content": "You are a helpful medical assistant that always responds in valid JSON format."},
-                {"role": "user", "content": prompt}
-            ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0.3
-        }
-
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=10
-        )
-
-        if response.status_code != 200:
-            logger.error(f"OpenRouter API error: {response.status_code} - {response.text}")
-            return Response({"error": "AI service unavailable"}, status=503)
-
-        # Parse and validate response
-        data = response.json()
-        raw_content = data["choices"][0]["message"]["content"]
+        # Make the API call
+        response_data = call_openrouter(question)
+        raw_content = response_data["choices"][0]["message"]["content"]
         
+        # Parse and validate response
         try:
             structured = json.loads(raw_content)
             if not isinstance(structured, dict) or 'summary' not in structured:
@@ -135,24 +151,17 @@ Return only valid JSON, no markdown or additional text.
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"Response parsing error: {str(e)}")
             return Response({
-                "error": "Failed to parse model response",
+                "error": "Failed to parse response",
                 "details": str(e),
                 "raw_response": raw_content
             }, status=500)
 
-    except requests.Timeout:
-        logger.error("OpenRouter API request timed out")
-        return Response({
-            "error": "AI service timeout",
-            "details": "The request took too long to complete"
-        }, status=504)
     except Exception as e:
         logger.error(f"Unexpected error in medication_qa: {str(e)}")
         return Response({
-            "error": "Internal server error",
+            "error": "Service temporarily unavailable",
             "details": str(e)
-        }, status=500)
-
+        }, status=503)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -167,9 +176,9 @@ def check_medication_qa_access(request):
             "is_unlimited": profile.plan != 'free',
             "plan": profile.plan
         })
-    except UserProfile.DoesNotExist:
+    except ObjectDoesNotExist:
         logger.error(f"Profile not found for user {request.user.id}")
         return Response({"error": "User profile not found"}, status=404)
     except Exception as e:
-        logger.error(f"Error checking medication QA access: {str(e)}")
-        return Response({"error": str(e)}, status=400)
+        logger.error(f"Error checking access: {str(e)}")
+        return Response({"error": "Internal server error"}, status=500)
