@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Lock } from "lucide-react";
 import axios from "../../lip/api";
 import { Link } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
 import api from "../../lip/api";
+
+type UserPlan = 'free' | 'plus' | 'pro' | null;
 
 interface Message {
   id: number;
@@ -13,6 +14,7 @@ interface Message {
 }
 
 // Constants
+const FREE_AUTHENTICATED_LIMIT = 10; 
 const MESSAGE_LIMIT = 5;
 const STORAGE_KEY = "chatMessageCount";
 
@@ -62,11 +64,14 @@ const ChatAssistant = () => {
   useEffect(() => {
     const checkAccess = async () => {
       try {
-        const response = await api.get("/features/check-chat-access/");
+        const response = await api.get("/chat/check-access/");
         setUserPlan(response.data.plan);
         setMessagesAllowed(response.data.messages_allowed);
-        if (!response.data.has_access) {
-          setShowLimitMessage(true);
+        // For paid users, never show limit message
+        if (response.data.plan === 'plus' || response.data.plan === 'pro') {
+          setShowLimitMessage(false);
+        } else {
+          setShowLimitMessage(!response.data.has_access);
         }
       } catch (error) {
         console.error("Error checking chat access:", error);
@@ -167,29 +172,23 @@ const handleSendMessage = async (e: React.FormEvent) => {
     let errorMsg =
       "Sorry, there was an error getting a response from the assistant.";
 
-    if (error?.response?.data?.error === "message_limit_reached") {
-      errorMsg = `You've reached your monthly message limit. ${
-        userPlan === "free"
-          ? "Upgrade your plan to continue chatting."
-          : "Please try again next month."
-      }`;
-      
-      // Force update the UI to show upgrade options
-      if (!userPlan) {
+      if (error?.response?.data?.error === "message_limit_reached") {
+        errorMsg = `You've reached your monthly message limit. ${
+          userPlan === "free"
+            ? "Upgrade your plan to continue chatting."
+            : "Please contact support if you're seeing this message."
+        }`;
+        
+        // Refresh user plan status
         try {
-          const response = await api.get("/api/features/check-chat-access/");
+          const response = await api.get("/chat/check-access/");
           setUserPlan(response.data.plan);
           setMessagesAllowed(response.data.messages_allowed);
+          setShowLimitMessage(response.data.plan === 'free');
         } catch (err) {
           console.error("Error checking chat access:", err);
         }
       }
-      setShowLimitMessage(true);
-    } else if (error?.response?.data?.detail) {
-      errorMsg = error.response.data.detail;
-    } else if (error?.response?.data?.error) {
-      errorMsg += `\n${error.response.data.error}`;
-    }
 
     const aiResponse: Message = {
       id: messages.length + 2,
@@ -209,10 +208,10 @@ const handleSendMessage = async (e: React.FormEvent) => {
 
   // Check if user has reached the message limit
   const accessToken = localStorage.getItem("accessToken");
-  const hasReachedLimit =
-    showLimitMessage ||
+  const hasReachedLimit = Boolean(
     (!accessToken && messageCount >= MESSAGE_LIMIT) ||
-    (userPlan === "free" && messageCount >= (messagesAllowed || 10));
+    (accessToken && userPlan === 'free' && messageCount >= (messagesAllowed || FREE_AUTHENTICATED_LIMIT))
+  );
 
   return (
     <div className="h-screen bg-background flex flex-col">
@@ -392,27 +391,29 @@ const handleSendMessage = async (e: React.FormEvent) => {
       <div className="bg-white border-t border-gray-200 px-4 py-4">
         <div className="max-w-4xl mx-auto">
           <form onSubmit={handleSendMessage} className="flex space-x-3">
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder={
-                hasReachedLimit
-                  ? accessToken
+          <input
+            type="text"
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            placeholder={
+              hasReachedLimit
+                ? accessToken
+                  ? userPlan === 'free'
                     ? "Upgrade your plan to continue chatting..."
-                    : "Sign in to continue chatting..."
-                  : "Ask me about your health concerns..."
-              }
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50"
-              disabled={isTyping || hasReachedLimit}
-            />
-            <button
-              type="submit"
-              disabled={!inputMessage.trim() || isTyping || hasReachedLimit}
-              className="bg-primary text-white p-3 rounded-lg hover:bg-primary-dark transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send className="h-5 w-5" />
-            </button>
+                    : "Please contact support..."
+                  : "Sign in to continue chatting..."
+                : "Ask me about your health concerns..."
+            }
+            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50"
+            disabled={isTyping || hasReachedLimit}
+          />
+          <button
+            type="submit"
+            disabled={!inputMessage.trim() || isTyping || hasReachedLimit}
+            className="bg-primary text-white p-3 rounded-lg hover:bg-primary-dark transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="h-5 w-5" />
+          </button>
           </form>
           {userPlan === "free" && !hasReachedLimit && (
             <div className="text-xs text-gray-500 mt-1 text-right">

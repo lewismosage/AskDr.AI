@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Shield, Bot, User, Send, Lock } from "lucide-react";
 import axios from "../../lip/api";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+
+type UserPlan = 'free' | 'plus' | 'pro' | null;
 
 interface Message {
   id: number;
@@ -17,6 +19,7 @@ interface AnonymousChatProps {
 // Constants
 const MESSAGE_LIMIT = 5;
 const STORAGE_KEY = "mentalHealthMessageCount";
+const FREE_AUTHENTICATED_LIMIT = 10;
 
 const formatTime = (date: Date) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -40,39 +43,24 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
   const [showLimitMessage, setShowLimitMessage] = useState(false);
-  const [userPlan, setUserPlan] = useState<"free" | "plus" | "pro" | null>(null);
+  const [userPlan, setUserPlan] = useState<UserPlan>(null);
   const [messagesAllowed, setMessagesAllowed] = useState<number | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
+    // Check if user is authenticated (has access token)
     const accessToken = localStorage.getItem("accessToken");
     if (accessToken) {
-      // Clear message limits if user is authenticated
+      // Clear the message limit for authenticated users
       localStorage.removeItem(STORAGE_KEY);
       setMessageCount(0);
       setShowLimitMessage(false);
-      checkChatAccess(); // Check user's plan and message limits
-    } else if (messageCount >= MESSAGE_LIMIT) {
-      // Redirect to auth with return path if limit reached
-      navigate(`/auth?from=${encodeURIComponent(location.pathname)}`);
+      checkAccess(); // Check user's plan and message limits
     }
-  }, [messageCount, navigate, location.pathname]);
-
-  // Check backend access for authenticated users
-  const checkChatAccess = async () => {
-    try {
-      const response = await axios.get("/features/check-chat-access/");
-      setUserPlan(response.data.plan);
-      setMessagesAllowed(response.data.messages_allowed);
-      if (!response.data.has_access) {
-        setShowLimitMessage(true);
-      }
-    } catch (error) {
-      console.error("Error checking chat access:", error);
-    }
-  };
+  }, []);
 
   // Initialize message count from localStorage
   useEffect(() => {
@@ -84,6 +72,31 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
       setShowLimitMessage(true);
     }
   }, []);
+
+  // Check backend access for authenticated users
+  const checkAccess = async () => {
+    try {
+      const response = await axios.get("/mentalhealth/check-access/");
+      setUserPlan(response.data.plan);
+      setMessagesAllowed(response.data.messages_allowed);
+      // For paid users, never show limit message
+      if (response.data.plan === 'plus' || response.data.plan === 'pro') {
+        setShowLimitMessage(false);
+      } else {
+        setShowLimitMessage(!response.data.has_access);
+      }
+    } catch (error) {
+      console.error("Error checking mental health access:", error);
+    }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const incrementMessageCount = () => {
     const newCount = messageCount + 1;
@@ -166,24 +179,18 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
         errorMsg = `You've reached your monthly message limit. ${
           userPlan === "free"
             ? "Upgrade your plan to continue chatting."
-            : "Please try again next month."
+            : "Please contact support if you're seeing this message."
         }`;
         
-        // Force update the UI to show upgrade options
-        if (!userPlan) {
-          try {
-            const response = await axios.get("/api/features/check-chat-access/");
-            setUserPlan(response.data.plan);
-            setMessagesAllowed(response.data.messages_allowed);
-          } catch (err) {
-            console.error("Error checking chat access:", err);
-          }
+        // Refresh user plan status
+        try {
+          const response = await axios.get("/mentalhealth/check-access/");
+          setUserPlan(response.data.plan);
+          setMessagesAllowed(response.data.messages_allowed);
+          setShowLimitMessage(response.data.plan === 'free');
+        } catch (err) {
+          console.error("Error checking mental health access:", err);
         }
-        setShowLimitMessage(true);
-      } else if (error?.response?.data?.detail) {
-        errorMsg = error.response.data.detail;
-      } else if (error?.response?.data?.error) {
-        errorMsg += `\n${error.response.data.error}`;
       }
 
       const aiResponse: Message = {
@@ -200,10 +207,10 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
 
   // Check if user has reached the message limit
   const accessToken = localStorage.getItem("accessToken");
-  const hasReachedLimit =
-    showLimitMessage ||
+  const hasReachedLimit = Boolean(
     (!accessToken && messageCount >= MESSAGE_LIMIT) ||
-    (userPlan === "free" && messageCount >= (messagesAllowed || 10));
+    (accessToken && userPlan === 'free' && messageCount >= (messagesAllowed || FREE_AUTHENTICATED_LIMIT))
+  );
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-8">
@@ -248,7 +255,7 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
                       message.sender === "user"
                         ? "bg-primary text-white"
                         : message.text.toLowerCase().includes("error")
-                        ? "bg-red-50 border border-red-200" // Special styling for error messages
+                        ? "bg-red-50 border border-red-200"
                         : "bg-gray-100 text-gray-800"
                     }`}
                   >
@@ -356,6 +363,8 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
                 </div>
               </div>
             )}
+
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}
@@ -368,7 +377,9 @@ const AnonymousChat: React.FC<AnonymousChatProps> = ({ initialMessages }) => {
                 placeholder={
                   hasReachedLimit
                     ? accessToken
-                      ? "Upgrade your plan to continue chatting..."
+                      ? userPlan === 'free'
+                        ? "Upgrade your plan to continue chatting..."
+                        : "Please contact support..."
                       : "Sign in to continue chatting..."
                     : "Share what's on your mind... (completely anonymous)"
                 }

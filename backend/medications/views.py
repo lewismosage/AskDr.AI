@@ -1,4 +1,4 @@
-import requests
+import google.generativeai as genai
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -7,8 +7,6 @@ import json
 from users.models import UserProfile
 import logging
 from django.core.exceptions import ObjectDoesNotExist
-from django.http import JsonResponse
-from rest_framework.permissions import AllowAny 
 
 logger = logging.getLogger(__name__)
 
@@ -17,28 +15,31 @@ FREE_UNAUTHENTICATED_LIMIT = 5
 FREE_AUTHENTICATED_LIMIT = 10
 UNLIMITED_ACCESS = 999999
 
+# Configure Gemini
+genai.configure(api_key=settings.GEMINI_API_KEY)
+
 # System prompt template
-SYSTEM_PROMPT = """
-You are a medical assistant specialized in medication-related questions. Follow these rules strictly:
+SYSTEM_PROMPT = """You are a medical assistant specialized in medication-related questions. Follow these rules strictly:
 
 1. Only respond in valid JSON format.
 2. If the question is about medications (drugs, prescriptions, side effects, interactions):
-{{
+{
     "summary": "Brief explanation",
     "precautions": ["list", "of", "precautions"],
     "advice": "When to consult a doctor"
-}}
+}
 
 3. If NOT about medications (diet, exercise, general health):
-{{
+{
     "summary": "Sorry, I specialize in medication questions only",
     "precautions": [],
     "advice": "Please ask about drugs, prescriptions, side effects or interactions"
-}}
+}
 
 4. Never provide medical advice beyond general information.
 5. Always recommend consulting a healthcare professional.
-"""
+
+Return ONLY the JSON object, no additional text or markdown."""
 
 def check_access_limits(request):
     """Handle access limits for both authenticated and unauthenticated users"""
@@ -73,35 +74,34 @@ def check_access_limits(request):
     
     return None
 
-def call_openrouter(prompt):
-    """Make the API call to OpenRouter"""
-    headers = {
-        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY.strip()}",
-        "HTTP-Referer": settings.FRONTEND_URL,
-        "X-Title": settings.COMPANY_NAME,
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "anthropic/claude-3-haiku",
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.3
-    }
-
+def call_gemini(prompt):
+    """Make the API call to Google Gemini"""
     try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=15
+        # Initialize the model (using Gemini 1.5 Flash for cost-effectiveness)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Create the full prompt
+        full_prompt = f"{SYSTEM_PROMPT}\n\nUser question: {prompt}"
+        
+        # Generate content
+        response = model.generate_content(
+            full_prompt,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 500,
+                "response_mime_type": "application/json"
+            }
         )
-        response.raise_for_status()  
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"OpenRouter request failed. Status: {e.response.status_code if hasattr(e, 'response') else 'No response'}. Error: {str(e)}")
+        
+        # Extract and clean the response
+        response_text = response.text.strip()
+        if response_text.startswith('```json'):
+            response_text = response_text[7:-3].strip()
+        
+        return json.loads(response_text)
+        
+    except Exception as e:
+        logger.error(f"Gemini API request failed: {str(e)}")
         raise
 
 @api_view(['POST'])
@@ -111,7 +111,7 @@ def medication_qa(request):
     Handle medication questions with:
     - Access control
     - Input validation
-    - API call to OpenRouter
+    - API call to Gemini
     - Response processing
     """
     # Check access limits first
@@ -126,42 +126,37 @@ def medication_qa(request):
 
     try:
         # Verify API key is available
-        if not settings.OPENROUTER_API_KEY:
-            logger.error("OpenRouter API key not configured")
+        if not settings.GEMINI_API_KEY:
+            logger.error("Gemini API key not configured")
             return Response({"error": "Service configuration error"}, status=500)
 
         # Make the API call
-        response_data = call_openrouter(question)
-        raw_content = response_data["choices"][0]["message"]["content"]
+        structured_response = call_gemini(question)
         
-        # Parse and validate response
-        try:
-            structured = json.loads(raw_content)
-            if not isinstance(structured, dict) or 'summary' not in structured:
-                raise ValueError("Invalid response format from AI model")
-            
-            # Record usage for authenticated users
-            if request.user.is_authenticated:
-                profile = request.user.profile
-                profile.record_feature_usage('medication_qa')
-                profile.save()
+        if not isinstance(structured_response, dict) or 'summary' not in structured_response:
+            raise ValueError("Invalid response format from AI model")
+        
+        # Record usage for authenticated users
+        if request.user.is_authenticated:
+            profile = request.user.profile
+            profile.record_feature_usage('medication_qa')
+            profile.save()
 
-            return Response(structured)
+        return Response(structured_response)
             
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Response parsing error: {str(e)}")
-            return Response({
-                "error": "Failed to parse response",
-                "details": str(e),
-                "raw_response": raw_content
-            }, status=500)
-
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"Response parsing error: {str(e)}")
+        return Response({
+            "error": "Failed to parse response",
+            "details": str(e)
+        }, status=500)
     except Exception as e:
         logger.error(f"Unexpected error in medication_qa: {str(e)}")
         return Response({
             "error": "Service temporarily unavailable",
             "details": str(e)
         }, status=503)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

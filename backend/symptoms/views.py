@@ -1,121 +1,188 @@
-import requests
+import google.generativeai as genai
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.conf import settings
 import json
-from rest_framework.exceptions import PermissionDenied
 from users.models import UserProfile
+import logging
+from django.core.exceptions import ObjectDoesNotExist
+
+logger = logging.getLogger(__name__)
+
+# Constants
+FREE_UNAUTHENTICATED_LIMIT = 5  # For non-logged in users
+FREE_AUTHENTICATED_LIMIT = 10   # For free plan users
+UNLIMITED_ACCESS = 999999       # For paid users
+
+# Configure Gemini
+genai.configure(api_key=settings.GEMINI_API_KEY)
+
+# System prompt template
+SYSTEM_PROMPT = """You are a medical assistant specialized in symptom analysis. Follow these rules strictly:
+
+1. Only respond in valid JSON format.
+2. Analyze the symptoms and return exactly 3 possible conditions in this format:
+{
+  "conditions": [
+    {
+      "name": "<Condition Name>",
+      "probability": "<Low/Medium/High or percentage>",
+      "severity": "<Mild/Moderate/Severe>",
+      "advice": "<Clear and safe advice>"
+    },
+    ...
+  ],
+  "note": "<General advice if symptoms persist>"
+}
+
+3. Never provide definitive diagnoses - only suggest possible conditions.
+4. Always recommend consulting a healthcare professional.
+5. For non-medical queries, respond with:
+{
+  "conditions": [],
+  "note": "Please describe medical symptoms for analysis"
+}
+
+Return ONLY the JSON object, no additional text or markdown."""
+
+def check_access_limits(request):
+    """Handle access limits for both authenticated and unauthenticated users"""
+    if not request.user.is_authenticated:
+        session = request.session
+        checks_used = session.get('unauthenticated_symptom_checks_used', 0)
+        
+        if checks_used >= FREE_UNAUTHENTICATED_LIMIT:
+            return Response({
+                'error': 'unauthenticated_limit_reached',
+                'message': f'You\'ve used all {FREE_UNAUTHENTICATED_LIMIT} free symptom checks. Sign in to continue.',
+                'limit': FREE_UNAUTHENTICATED_LIMIT,
+                'used': checks_used,
+                'requires_auth': True
+            }, status=403)
+        
+        session['unauthenticated_symptom_checks_used'] = checks_used + 1
+        session.modified = True
+    else:
+        try:
+            profile = request.user.profile
+            if not profile.can_use_feature('symptom_check'):
+                return Response({
+                    'error': 'authenticated_limit_reached',
+                    'message': f'You\'ve used {profile.monthly_symptom_checks_used} of your {FREE_AUTHENTICATED_LIMIT} monthly checks.',
+                    'limit': FREE_AUTHENTICATED_LIMIT,
+                    'used': profile.monthly_symptom_checks_used,
+                    'requires_upgrade': profile.plan == 'free'
+                }, status=403)
+        except ObjectDoesNotExist:
+            return Response({'error': 'User profile not found'}, status=404)
+    
+    return None
+
+def call_gemini(prompt):
+    """Make the API call to Google Gemini for symptom analysis"""
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        full_prompt = f"{SYSTEM_PROMPT}\n\nSymptoms to analyze: {prompt}"
+        
+        response = model.generate_content(
+            full_prompt,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 500,
+                "response_mime_type": "application/json"
+            }
+        )
+        
+        # Clean the response
+        response_text = response.text.strip()
+        if response_text.startswith('```json'):
+            response_text = response_text[7:-3].strip()
+        
+        return json.loads(response_text)
+        
+    except Exception as e:
+        logger.error(f"Gemini API request failed: {str(e)}")
+        raise
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def check_symptoms(request):
-    # For authenticated users, check feature access
-    if request.user.is_authenticated:
-        profile = request.user.profile
-        if not profile.can_use_feature('symptom_check'):
-            raise PermissionDenied(
-                detail=f"You've used {profile.monthly_symptom_checks_used} of "
-                      f"{5 if profile.plan == 'free' else 'unlimited'} symptom checks this month. "
-                      f"{'Upgrade your plan for unlimited checks.' if profile.plan == 'free' else ''}"
-            )
+    """
+    Handle symptom analysis with:
+    - Access control
+    - Input validation
+    - API call to Gemini
+    - Response processing
+    """
+    # Check access limits first
+    access_check = check_access_limits(request)
+    if access_check:
+        return access_check
 
-    symptoms = request.data.get("symptoms", "")
+    # Validate input
+    symptoms = request.data.get("symptoms", "").strip()
     if not symptoms:
-        return Response({"error": "No symptoms provided."}, status=400)
+        return Response({"error": "No symptoms provided"}, status=400)
 
     try:
-        headers = {
-            "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        # Verify API key is available
+        if not settings.GEMINI_API_KEY:
+            logger.error("Gemini API key not configured")
+            return Response({"error": "Service configuration error"}, status=500)
 
-        prompt = (
-            f"The user reports the following symptoms: {symptoms}. "
-            "Return exactly 3 possible medical conditions in structured JSON with the format:\n"
-            "{\n"
-            "  \"conditions\": [\n"
-            "    {\n"
-            "      \"name\": \"<Condition Name>\",\n"
-            "      \"probability\": \"<Probability as a percentage or qualitative (e.g., High, Medium, Low)>\",\n"
-            "      \"severity\": \"<Severity as Mild, Moderate, or Severe>\",\n"
-            "      \"advice\": \"<Clear and safe advice for the user>\"\n"
-            "    },\n"
-            "    ...\n"
-            "  ],\n"
-            "  \"note\": \"<General note if symptoms worsen or persist>\"\n"
-            "}\n"
-            "Include only valid JSON. Do not include markdown or additional explanations."
-        )
-
-        payload = {
-            "model": "anthropic/claude-3-haiku",
-            "messages": [
-                {"role": "system", "content": "You are a helpful medical assistant that always responds in valid JSON format."},
-                {"role": "user", "content": prompt}
-            ],
-            "response_format": {"type": "json_object"}  # Ensure JSON output
-        }
-
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-        data = response.json()
-
-        if response.status_code != 200:
-            return Response({"error": data}, status=response.status_code)
-
-        raw_content = data["choices"][0]["message"]["content"]
+        # Make the API call
+        structured_response = call_gemini(symptoms)
         
-        try:
-            # Safely parse JSON response
-            structured = json.loads(raw_content)
-            
-            # Validate the response structure
-            if not isinstance(structured, dict) or 'conditions' not in structured:
-                raise ValueError("Invalid response format from AI model")
-            
-            # Record usage for authenticated free users
-            if request.user.is_authenticated and request.user.profile.plan == 'free':
-                request.user.profile.record_feature_usage('symptom_check')
-                request.user.profile.save()
+        if not isinstance(structured_response, dict) or 'conditions' not in structured_response:
+            raise ValueError("Invalid response format from AI model")
+        
+        # Record usage for authenticated users
+        if request.user.is_authenticated:
+            profile = request.user.profile
+            profile.record_feature_usage('symptom_check')
+            profile.save()
 
-            return Response(structured)
+        return Response(structured_response)
             
-        except (json.JSONDecodeError, ValueError) as parse_err:
-            # Try to extract error message if response isn't valid JSON
-            error_msg = str(parse_err)
-            if "error" in raw_content:
-                try:
-                    error_data = json.loads(raw_content)
-                    error_msg = error_data.get("error", error_msg)
-                except:
-                    pass
-            
-            return Response({
-                "error": "Failed to parse model response",
-                "details": error_msg,
-                "raw_response": raw_content
-            }, status=500)
-
-    except PermissionDenied as pe:
-        raise  # Re-raise permission denied errors
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"Response parsing error: {str(e)}")
         return Response({
-            "error": "An unexpected error occurred",
+            "error": "Failed to parse response",
             "details": str(e)
         }, status=500)
-
+    except Exception as e:
+        logger.error(f"Unexpected error in symptom check: {str(e)}")
+        return Response({
+            "error": "Service temporarily unavailable",
+            "details": str(e)
+        }, status=503)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def check_symptom_access(request):
-    """Endpoint for frontend to check user's access status"""
+    """Check user's symptom check access status"""
     try:
         profile = request.user.profile
         return Response({
             "has_access": profile.can_use_feature('symptom_check'),
             "checks_used": profile.monthly_symptom_checks_used,
-            "checks_allowed": 5 if profile.plan == 'free' else float('inf'),
+            "checks_allowed": FREE_AUTHENTICATED_LIMIT if profile.plan == 'free' else UNLIMITED_ACCESS,
+            "is_unlimited": profile.plan != 'free',
             "plan": profile.plan
         })
+    except ObjectDoesNotExist:
+        logger.error(f"Profile not found for user {request.user.id}")
+        return Response({"error": "User profile not found"}, status=404)
     except Exception as e:
-        return Response({"error": str(e)}, status=400)
+        logger.error(f"Error checking access: {str(e)}")
+        return Response({"error": "Internal server error"}, status=500)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def debug_check_key(request):
+    """Simplified debug endpoint"""
+    return Response({
+        "key_exists": bool(settings.GEMINI_API_KEY),
+        "key_prefix": settings.GEMINI_API_KEY[:5] + "..." if settings.GEMINI_API_KEY else None
+    })

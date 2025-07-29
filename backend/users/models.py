@@ -16,6 +16,7 @@ class UserProfile(models.Model):
     monthly_symptom_checks_used = models.PositiveIntegerField(default=0)
     monthly_medication_questions_used = models.PositiveIntegerField(default=0)
     monthly_chat_messages_used = models.PositiveIntegerField(default=0)
+    monthly_mentalhealth_messages_used = models.PositiveIntegerField(default=0)
     last_reset_date = models.DateField(auto_now_add=True)
     
     def __str__(self):

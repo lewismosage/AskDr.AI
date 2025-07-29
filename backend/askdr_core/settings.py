@@ -28,6 +28,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-s^$#5x%ohu(9c#t1+a!xt$mm!e
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
