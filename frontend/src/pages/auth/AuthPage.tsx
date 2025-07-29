@@ -332,18 +332,18 @@ const AuthPage = () => {
                 <div className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                <span className="px-2 bg-white text-gray-500">{/*Or continue with*/}</span>
               </div>
             </div>
 
-            {/* Google Sign In */}
+            {/* Google Sign In 
             <button
               type="button"
               className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200"
             >
               <Chrome className="h-5 w-5 mr-2" />
               Continue with Google
-            </button>
+            </button> */}
           </form>
 
           {/* Toggle Auth Mode */}
@@ -363,9 +363,9 @@ const AuthPage = () => {
         {/* Terms */}
         <p className="text-center text-xs text-gray-500">
           By continuing, you agree to our{' '}
-          <a href="#" className="text-primary hover:text-primary-dark">Terms of Service</a>
+          <a href="/terms" className="text-primary hover:text-primary-dark">Terms of Service</a>
           {' '}and{' '}
-          <a href="#" className="text-primary hover:text-primary-dark">Privacy Policy</a>
+          <a href="/terms" className="text-primary hover:text-primary-dark">Privacy Policy</a>
         </p>
       </div>
     </div>

@@ -36,52 +36,8 @@ const TherapistConnect = () => {
 
 
   const therapists: Therapist[] = [
-    {
-      id: 1,
-      name: "Dr. Sarah Chen",
-      specialty: "Anxiety & Depression",
-      rating: 4.9,
-      reviews: 127,
-      location: "Downtown Medical Center",
-      distance: "2.3 miles",
-      price: "$120/session",
-      availability: "Available today",
-      image: "https://images.pexels.com/photos/5327580/pexels-photo-5327580.jpeg?auto=compress&cs=tinysrgb&w=400",
-      verified: true,
-      languages: ["English", "Mandarin"],
-      approaches: ["CBT", "Mindfulness", "EMDR"]
-    },
-    {
-      id: 2,
-      name: "Dr. Michael Rodriguez",
-      specialty: "Trauma & PTSD",
-      rating: 4.8,
-      reviews: 89,
-      location: "Wellness Psychology Group",
-      distance: "1.8 miles",
-      price: "$140/session",
-      availability: "Next available: Tomorrow",
-      image: "https://images.pexels.com/photos/5327921/pexels-photo-5327921.jpeg?auto=compress&cs=tinysrgb&w=400",
-      verified: true,
-      languages: ["English", "Spanish"],
-      approaches: ["EMDR", "Somatic Therapy", "CPT"]
-    },
-    {
-      id: 3,
-      name: "Dr. Emily Johnson",
-      specialty: "Relationship & Family",
-      rating: 4.7,
-      reviews: 156,
-      location: "Family Therapy Associates",
-      distance: "3.1 miles",
-      price: "$110/session",
-      availability: "Available this week",
-      image: "https://images.pexels.com/photos/5327656/pexels-photo-5327656.jpeg?auto=compress&cs=tinysrgb&w=400",
-      verified: true,
-      languages: ["English"],
-      approaches: ["EFT", "Gottman Method", "CBT"]
-    }
-  ];
+    
+  ]; 
 
   const moodOptions = [
     { value: 1, emoji: "😢", label: "Very Low" },
@@ -162,7 +118,7 @@ const TherapistConnect = () => {
         {/* Find Therapist Tab */}
         {activeTab === 'connect' && (
           <FindTherapist therapists={therapists} />
-        )}
+        )} 
 
         {/* Journal Tab */}
         {activeTab === 'journal' && (
