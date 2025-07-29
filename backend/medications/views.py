@@ -7,6 +7,8 @@ import json
 from users.models import UserProfile
 import logging
 from django.core.exceptions import ObjectDoesNotExist
+from django.http import JsonResponse
+from rest_framework.permissions import AllowAny 
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +76,9 @@ def check_access_limits(request):
 def call_openrouter(prompt):
     """Make the API call to OpenRouter"""
     headers = {
-        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-        "HTTP-Referer": settings.FRONTEND_URL or "http://localhost:8000",
-        "X-Title": settings.COMPANY_NAME or "AskDr.AI",
+        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY.strip()}",
+        "HTTP-Referer": settings.FRONTEND_URL,
+        "X-Title": settings.COMPANY_NAME,
         "Content-Type": "application/json"
     }
 
@@ -86,9 +88,7 @@ def call_openrouter(prompt):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.3,
-        "max_tokens": 500
+        "temperature": 0.3
     }
 
     try:
@@ -96,12 +96,12 @@ def call_openrouter(prompt):
             "https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=15  # Increased timeout for medical queries
+            timeout=15
         )
-        response.raise_for_status()
+        response.raise_for_status()  
         return response.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"OpenRouter API request failed: {str(e)}")
+        logger.error(f"OpenRouter request failed. Status: {e.response.status_code if hasattr(e, 'response') else 'No response'}. Error: {str(e)}")
         raise
 
 @api_view(['POST'])
@@ -182,3 +182,12 @@ def check_medication_qa_access(request):
     except Exception as e:
         logger.error(f"Error checking access: {str(e)}")
         return Response({"error": "Internal server error"}, status=500)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def debug_check_key(request):
+    """Simplified debug endpoint"""
+    return Response({
+        "key_exists": bool(settings.OPENROUTER_API_KEY),
+        "key_prefix": settings.OPENROUTER_API_KEY[:5] + "..." if settings.OPENROUTER_API_KEY else None
+    })
