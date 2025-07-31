@@ -9,8 +9,9 @@ export default defineConfig({
         '@stripe/stripe-js',
         '@stripe/react-stripe-js'
       ],
+      input: './src/main.tsx' 
     },
-    outDir: 'dist',
+    outDir: './dist', 
     assetsDir: 'assets',
     emptyOutDir: true
   },
