@@ -49,6 +49,7 @@ Return ONLY the JSON object, no additional text or markdown."""
 def check_access_limits(request):
     """Handle access limits for both authenticated and unauthenticated users"""
     if not request.user.is_authenticated:
+        # Use session to track unauthenticated usage
         session = request.session
         checks_used = session.get('unauthenticated_symptom_checks_used', 0)
         
@@ -60,22 +61,25 @@ def check_access_limits(request):
                 'used': checks_used,
                 'requires_auth': True
             }, status=403)
-        
+
+        # Increment and save to session
         session['unauthenticated_symptom_checks_used'] = checks_used + 1
-        session.modified = True
-    else:
-        try:
-            profile = request.user.profile
-            if not profile.can_use_feature('symptom_check'):
-                return Response({
-                    'error': 'authenticated_limit_reached',
-                    'message': f'You\'ve used {profile.monthly_symptom_checks_used} of your {FREE_AUTHENTICATED_LIMIT} monthly checks.',
-                    'limit': FREE_AUTHENTICATED_LIMIT,
-                    'used': profile.monthly_symptom_checks_used,
-                    'requires_upgrade': profile.plan == 'free'
-                }, status=403)
-        except ObjectDoesNotExist:
-            return Response({'error': 'User profile not found'}, status=404)
+        session.modified = True  
+        return None  #
+        
+    # Existing authenticated user logic...
+    try:
+        profile = request.user.profile
+        if not profile.can_use_feature('symptom_check'):
+            return Response({
+                'error': 'authenticated_limit_reached',
+                'message': f'You\'ve used {profile.monthly_symptom_checks_used} of your {FREE_AUTHENTICATED_LIMIT} monthly checks.',
+                'limit': FREE_AUTHENTICATED_LIMIT,
+                'used': profile.monthly_symptom_checks_used,
+                'requires_upgrade': profile.plan == 'free'
+            }, status=403)
+    except ObjectDoesNotExist:
+        return Response({'error': 'User profile not found'}, status=404)
     
     return None
 

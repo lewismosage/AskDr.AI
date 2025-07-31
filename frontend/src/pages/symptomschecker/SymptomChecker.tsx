@@ -71,58 +71,88 @@ const SymptomChecker = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const accessToken = localStorage.getItem("accessToken");
-
-    if (!symptoms.trim() || (showLimitMessage && !accessToken)) return;
-
+    const accessToken = localStorage.getItem('accessToken');
+  
+    // Don't proceed if no symptoms entered
+    if (!symptoms.trim()) return;
+  
+    // Check local storage count for unauthenticated users
+    const storedCount = localStorage.getItem(STORAGE_KEY);
+    const localCount = storedCount ? parseInt(storedCount) : 0;
+  
+    // Check if user has reached any applicable limits
+    const hasReachedUnauthenticatedLimit = !accessToken && localCount >= SYMPTOM_CHECK_LIMIT;
+    const hasReachedAuthenticatedLimit = accessToken && userPlan === 'free' && checksAllowed !== null && checkCount >= checksAllowed;
+  
+    if (hasReachedUnauthenticatedLimit || hasReachedAuthenticatedLimit) {
+      setShowLimitMessage(true);
+      return;
+    }
+  
     setIsLoading(true);
     setResults([]);
     setNote("");
-
-    if (!accessToken) {
-      incrementCheckCount();
-    }
-
+  
     try {
-      const headers = accessToken
-        ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
+      const headers = accessToken 
+        ? { Authorization: `Bearer ${accessToken}` } 
         : {};
-
+  
       const res = await api.post("/symptoms/check/", { symptoms }, { headers });
       const data = res.data || {};
+  
+      // Update results and note
       setResults(data.conditions || []);
       setNote(data.note || "");
+  
+      // Increment count for unauthenticated users
+      if (!accessToken) {
+        const newCount = localCount + 1;
+        localStorage.setItem(STORAGE_KEY, newCount.toString());
+        setCheckCount(newCount);
+  
+        // Show limit message if reached after this check
+        if (newCount >= SYMPTOM_CHECK_LIMIT) {
+          setShowLimitMessage(true);
+        }
+      }
+  
     } catch (error: any) {
       let errorMsg = "Sorry, there was an error analyzing your symptoms.";
-
-      if (error?.response?.data?.error === "message_limit_reached") {
-        errorMsg = `You've reached your monthly symptom check limit. ${
-          userPlan === "free"
-            ? "Upgrade your plan to continue using this feature."
-            : "Please try again next month."
-        }`;
-
-        // Force update the UI to show upgrade options
+  
+      // Handle different error cases
+      if (error?.response?.data?.error === 'unauthenticated_limit_reached') {
+        // Sync with backend session count
+        localStorage.setItem(STORAGE_KEY, SYMPTOM_CHECK_LIMIT.toString());
+        setCheckCount(SYMPTOM_CHECK_LIMIT);
+        setShowLimitMessage(true);
+        errorMsg = `You've used all ${SYMPTOM_CHECK_LIMIT} free symptom checks. Sign in to continue.`;
+      } 
+      else if (error?.response?.data?.error === 'authenticated_limit_reached') {
+        // For authenticated free tier users
+        const used = error.response.data.used || 0;
+        const limit = error.response.data.limit || 10; // Assuming FREE_AUTHENTICATED_LIMIT is 10
+        errorMsg = `You've used ${used} of your ${limit} monthly symptom checks.`;
+        setShowLimitMessage(true);
+        
+        // Update plan info if not already set
         if (!userPlan) {
           try {
-            const response = await api.get(
-              "/features/check-feature-access/?feature=symptom_check"
-            );
+            const response = await api.get("/features/check-symptom-access/");
             setUserPlan(response.data.plan);
             setChecksAllowed(response.data.checks_allowed);
           } catch (err) {
             console.error("Error checking feature access:", err);
           }
         }
-        setShowLimitMessage(true);
-      } else if (error?.response?.data?.detail) {
+      }
+      else if (error?.response?.data?.detail) {
         errorMsg = error.response.data.detail;
-      } else if (error?.response?.data?.error) {
+      }
+      else if (error?.response?.data?.error) {
         errorMsg += `\n${error.response.data.error}`;
       }
-
+  
       setNote(errorMsg);
     } finally {
       setIsLoading(false);
