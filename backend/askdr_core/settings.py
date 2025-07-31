@@ -35,6 +35,7 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 DEBUG = False
 
 ALLOWED_HOSTS = [
+    '127.0.0.1',
     'askdr-ai.onrender.com',  
     'localhost',            
 ]
@@ -42,7 +43,7 @@ ALLOWED_HOSTS = [
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
-    'https://askdrai.vercel.app/'
+    'https://askdrai.vercel.app'
 ]
 
 CSRF_TRUSTED_ORIGINS = [
