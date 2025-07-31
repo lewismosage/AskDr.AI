@@ -10,5 +10,11 @@ export default defineConfig({
         '@stripe/react-stripe-js'
       ],
     },
+    
+    outDir: 'dist',
+    assetsDir: 'assets',
+    emptyOutDir: true
   },
+  // Base path:
+  base: './'
 });
