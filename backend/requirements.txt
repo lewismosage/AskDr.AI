@@ -7,4 +7,7 @@ python-dotenv
 openai
 stripe
 google-generativeai
-gunicorn>=20.0.0,<24.0.0
+gunicorn==23.0.0
+celery==5.3.6          
+redis==5.0.1           
+django-celery-beat==2.6.0  
